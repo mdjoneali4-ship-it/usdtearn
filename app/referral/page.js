@@ -11,8 +11,13 @@ export default function ReferralPage() {
   const [referredUsers, setReferredUsers] = useState([])
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [origin, setOrigin] = useState('')
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setOrigin(window.location.origin)
+    }
+
     async function fetchReferralData() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
@@ -46,12 +51,12 @@ export default function ReferralPage() {
     fetchReferralData()
   }, [router])
 
-  const referralLink = typeof window !== 'undefined' && profile?.referral_code
-    ? `${window.location.origin}/signup?ref=${profile.referral_code}`
-    : ''
+  const referralLink = origin && profile?.referral_code
+    ? `${origin}/signup?ref=${profile.referral_code}`
+    : profile?.referral_code ? `https://usdtearn.ai/signup?ref=${profile.referral_code}` : 'Generating code...'
 
   const handleCopy = () => {
-    if (!referralLink) return
+    if (!referralLink || referralLink === 'Generating code...') return
     navigator.clipboard.writeText(referralLink)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -93,7 +98,7 @@ export default function ReferralPage() {
 
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
             <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
-              <DollarSign className="w-4 h-4 text-emerald-400" /> Referral Code
+              <DollarSign className="w-4 h-4 text-emerald-400" /> Your Code
             </div>
             <h2 className="text-2xl font-extrabold text-amber-400">{profile?.referral_code || 'N/A'}</h2>
           </div>
@@ -119,7 +124,7 @@ export default function ReferralPage() {
           </div>
         </div>
 
-        {/* Referred Users List */}
+        {/* Team Section */}
         <div className="space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
             My Team ({referredUsers.length})
@@ -151,5 +156,4 @@ export default function ReferralPage() {
       </div>
     </div>
   )
-    }
-            
+                      }
