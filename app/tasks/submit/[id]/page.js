@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Send } from 'lucide-react'
-import { supabase } from '../../../../lib/supabase'
+import { supabase } from '../../../lib/supabase'
 
 export default function SubmitProofPage() {
   const router = useRouter()
@@ -91,4 +91,4 @@ export default function SubmitProofPage() {
       </div>
     </div>
   )
-    }
+}
