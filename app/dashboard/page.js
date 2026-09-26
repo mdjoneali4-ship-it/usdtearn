@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Wallet, CheckSquare, ArrowUpRight, LogOut, User, ShieldCheck } from 'lucide-react'
+import { Wallet, CheckSquare, ArrowUpRight, LogOut, User, Crown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function Dashboard() {
@@ -18,7 +18,7 @@ export default function Dashboard() {
         return
       }
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
@@ -78,24 +78,23 @@ export default function Dashboard() {
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-4">
-          <Link href="/tasks" className="p-4 bg-slate-900 border border-slate-800 rounded-2xl hover:border-emerald-500/50 transition flex flex-col justify-between h-28">
-            <CheckSquare className="w-6 h-6 text-emerald-400" />
-            <div>
-              <p className="font-bold text-sm text-slate-100">Earn Money</p>
-              <p className="text-[10px] text-slate-400">Complete tasks & earn</p>
-            </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Link href="/vip" className="p-3 bg-slate-900 border border-amber-500/30 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
+            <Crown className="w-5 h-5 text-amber-400" />
+            <span className="font-bold text-xs text-amber-400">VIP Levels</span>
           </Link>
 
-          <Link href="/withdraw" className="p-4 bg-slate-900 border border-slate-800 rounded-2xl hover:border-emerald-500/50 transition flex flex-col justify-between h-28">
-            <ArrowUpRight className="w-6 h-6 text-teal-400" />
-            <div>
-              <p className="font-bold text-sm text-slate-100">Withdraw</p>
-              <p className="text-[10px] text-slate-400">Cashout via bKash/Nagad</p>
-            </div>
+          <Link href="/tasks" className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
+            <CheckSquare className="w-5 h-5 text-emerald-400" />
+            <span className="font-bold text-xs text-slate-200">Earn</span>
+          </Link>
+
+          <Link href="/withdraw" className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
+            <ArrowUpRight className="w-5 h-5 text-teal-400" />
+            <span className="font-bold text-xs text-slate-200">Withdraw</span>
           </Link>
         </div>
       </div>
     </div>
   )
-          }
+              }
