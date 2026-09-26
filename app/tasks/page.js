@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Lock, ExternalLink, PlusCircle, Send } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Lock, ExternalLink, PlusCircle, Send, Image as ImageIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function TasksPage() {
@@ -13,6 +13,7 @@ export default function TasksPage() {
   // Proof Modal State
   const [selectedTask, setSelectedTask] = useState(null)
   const [proofText, setProofText] = useState('')
+  const [proofFile, setProofFile] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -28,7 +29,6 @@ export default function TasksPage() {
 
         setProfile(userProfile)
 
-        // Fetch user's submitted or completed task proofs
         const { data: completions } = await supabase
           .from('task_proofs')
           .select('task_id')
@@ -60,11 +60,37 @@ export default function TasksPage() {
     if (!profile || !selectedTask) return
     setSubmitting(true)
 
+    let finalProofContent = proofText
+
+    // যদি ইউজার কোনো স্ক্রিনশট বা ছবি সিলেক্ট করে থাকে
+    if (proofFile) {
+      const fileExt = proofFile.name.split('.').pop()
+      const fileName = `${profile.id}_${Math.random()}.${fileExt}`
+      const filePath = `${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('task-proofs')
+        .upload(filePath, proofFile)
+
+      if (uploadError) {
+        alert('Error uploading image: ' + uploadError.message)
+        setSubmitting(false)
+        return
+      }
+
+      // ছবির পাবলিক লিংক বের করা
+      const { data: publicURLData } = supabase.storage
+        .from('task-proofs')
+        .getPublicUrl(filePath)
+
+      finalProofContent = `Text/Username: ${proofText} \nScreenshot: ${publicURLData.publicUrl}`
+    }
+
     const { error } = await supabase.from('task_proofs').insert([
       {
         task_id: selectedTask.id,
         user_id: profile.id,
-        proof_text: proofText,
+        proof_text: finalProofContent,
         status: 'pending'
       },
     ])
@@ -72,10 +98,11 @@ export default function TasksPage() {
     if (error) {
       alert('Error submitting proof: ' + error.message)
     } else {
-      alert('Proof submitted successfully! Waiting for admin/owner approval.')
+      alert('Proof submitted successfully! Waiting for admin review.')
       setCompletedTaskIds([...completedTaskIds, selectedTask.id])
       setSelectedTask(null)
       setProofText('')
+      setProofFile(null)
     }
     setSubmitting(false)
   }
@@ -189,21 +216,33 @@ export default function TasksPage() {
               
               <form onSubmit={handleSubmitProof} className="space-y-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-300">Proof Details / Username / Screenshot Link</label>
+                  <label className="text-xs font-semibold text-slate-300">Proof Text / Username / Details</label>
                   <textarea
-                    rows="3"
+                    rows="2"
                     required
                     value={proofText}
                     onChange={(e) => setProofText(e.target.value)}
-                    placeholder="Enter your submitted username or proof link..."
+                    placeholder="Enter your submitted username or details..."
                     className="w-full mt-1 p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-emerald-400" /> Upload Screenshot (Optional)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setProofFile(e.target.files[0])}
+                    className="w-full mt-1 p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-600 cursor-pointer"
                   />
                 </div>
 
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedTask(null)}
+                    onClick={() => { setSelectedTask(null); setProofFile(null); }}
                     className="w-1/2 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition"
                   >
                     Cancel
@@ -213,7 +252,7 @@ export default function TasksPage() {
                     disabled={submitting}
                     className="w-1/2 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5"
                   >
-                    <Send className="w-3.5 h-3.5" /> {submitting ? 'Submitting...' : 'Send Proof'}
+                    <Send className="w-3.5 h-3.5" /> {submitting ? 'Uploading...' : 'Send Proof'}
                   </button>
                 </div>
               </form>
@@ -224,5 +263,5 @@ export default function TasksPage() {
       </div>
     </div>
   )
-                                }
-          
+                        }
+                        
