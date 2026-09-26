@@ -1,100 +1,134 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Wallet, CheckSquare, ArrowUpRight, LogOut, User, Crown } from 'lucide-react'
+import { Crown, CheckCircle2, ArrowLeft, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-export default function Dashboard() {
+export default function VIPPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  // আপনার নতুন প্রাইস লিস্ট অনুযায়ী আপডেট করা VIP Plans
+  const vipPlans = [
+    { level: 0, name: 'VIP 0 (Free)', price: 0, dailyTasks: 2, taskReward: 0.10, dailyIncome: 0.20 },
+    { level: 1, name: 'VIP 1 Standard', price: 10, dailyTasks: 5, taskReward: 0.50, dailyIncome: 2.50 },
+    { level: 2, name: 'VIP 2 Pro', price: 500, dailyTasks: 15, taskReward: 2.00, dailyIncome: 30.00 },
+    { level: 3, name: 'VIP 3 Elite', price: 750, dailyTasks: 25, taskReward: 2.50, dailyIncome: 62.50 },
+    { level: 4, name: 'VIP 4 Master', price: 1000, dailyTasks: 40, taskReward: 3.00, dailyIncome: 120.00 },
+  ]
 
   useEffect(() => {
-    async function getProfile() {
+    async function fetchProfile() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
+      if (user) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        if (data) setProfile(data)
       }
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (data) setProfile(data)
       setLoading(false)
     }
+    fetchProfile()
+  }, [])
 
-    getProfile()
-  }, [router])
+  const handleUpgrade = async (plan) => {
+    if (!profile) return router.push('/login')
+    if (profile.balance < plan.price) {
+      alert(`insufficient balance! You need $${plan.price} USDT. Please deposit first.`)
+      return router.push('/deposit')
+    }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+    if (confirm(`Are you sure you want to upgrade to ${plan.name} for $${plan.price} USDT?`)) {
+      const newBalance = profile.balance - plan.price
+      const { error } = await supabase
+        .from('profiles')
+        .update({ balance: newBalance, vip_level: plan.level })
+        .eq('id', profile.id)
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <p className="text-emerald-400 font-semibold animate-pulse">Loading dashboard...</p>
-      </div>
-    )
+      if (error) {
+        alert('Upgrade failed: ' + error.message)
+      } else {
+        alert(`Successfully upgraded to ${plan.name}!`)
+        window.location.reload()
+      }
+    }
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 pb-20">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header Section */}
-        <div className="flex justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400">
-              <User className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="font-bold text-sm text-slate-100">{profile?.full_name || 'User'}</h2>
-              <p className="text-xs text-slate-400">{profile?.email}</p>
-            </div>
-          </div>
-          <button 
-            onClick={handleLogout}
-            className="p-2 bg-rose-500/10 text-rose-400 rounded-xl hover:bg-rose-500/20 text-xs flex items-center gap-1 transition"
-          >
-            <LogOut className="w-4 h-4" /> Logout
-          </button>
-        </div>
-
-        {/* Balance Card */}
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 rounded-2xl shadow-xl flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard" className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-300">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
           <div>
-            <p className="text-xs text-emerald-100 uppercase tracking-wider font-semibold">Total Balance</p>
-            <h1 className="text-3xl font-extrabold text-white mt-1">${profile?.balance || 0.00} USDT</h1>
+            <h1 className="text-xl font-bold text-amber-400 flex items-center gap-2">
+              <Crown className="w-5 h-5" /> VIP Membership
+            </h1>
+            <p className="text-xs text-slate-400">Upgrade your level to boost daily earnings</p>
           </div>
-          <Link href="/deposit" className="px-4 py-2.5 bg-slate-950 text-emerald-400 font-bold rounded-xl text-xs hover:bg-slate-900 transition flex items-center gap-1">
-            <Wallet className="w-4 h-4" /> Deposit
-          </Link>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-3 gap-3">
-          <Link href="/vip" className="p-3 bg-slate-900 border border-amber-500/30 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
-            <Crown className="w-5 h-5 text-amber-400" />
-            <span className="font-bold text-xs text-amber-400">VIP Levels</span>
-          </Link>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {vipPlans.map((plan) => {
+            const isCurrent = profile?.vip_level === plan.level
+            return (
+              <div 
+                key={plan.level} 
+                className={`p-5 rounded-2xl border transition relative flex flex-col justify-between ${
+                  isCurrent ? 'bg-amber-500/10 border-amber-500/50' : 'bg-slate-900 border-slate-800'
+                }`}
+              >
+                {isCurrent && (
+                  <span className="absolute -top-3 right-4 bg-amber-500 text-slate-950 text-[10px] font-extrabold px-3 py-0.5 rounded-full uppercase tracking-wider">
+                    Current Level
+                  </span>
+                )}
 
-          <Link href="/tasks" className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
-            <CheckSquare className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-xs text-slate-200">Earn</span>
-          </Link>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-100">{plan.name}</h2>
+                      <p className="text-2xl font-extrabold text-amber-400 mt-1">
+                        ${plan.price} <span className="text-xs text-slate-400 font-normal">USDT / TK</span>
+                      </p>
+                    </div>
+                    <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
+                      <Zap className="w-5 h-5" />
+                    </div>
+                  </div>
 
-          <Link href="/withdraw" className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
-            <ArrowUpRight className="w-5 h-5 text-teal-400" />
-            <span className="font-bold text-xs text-slate-200">Withdraw</span>
-          </Link>
+                  <hr className="border-slate-800" />
+
+                  <ul className="space-y-2 text-xs text-slate-300">
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Daily Tasks: <strong>{plan.dailyTasks}</strong>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Reward Per Task: <strong>${plan.taskReward}</strong>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Daily Max Profit: <strong>${plan.dailyIncome}</strong>
+                    </li>
+                  </ul>
+                </div>
+
+                <button
+                  disabled={isCurrent || plan.level === 0}
+                  onClick={() => handleUpgrade(plan)}
+                  className={`w-full mt-6 py-2.5 rounded-xl font-bold text-xs transition ${
+                    isCurrent 
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
+                      : 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                  }`}
+                >
+                  {isCurrent ? 'Active Level' : `Unlock for $${plan.price}`}
+                </button>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
   )
-              }
+}
