@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function AdminDashboard() {
@@ -10,6 +10,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState([])
   const [pendingTasks, setPendingTasks] = useState([])
+  const [deposits, setDeposits] = useState([])
+  const [withdrawals, setWithdrawals] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   
   const [taskTitle, setTaskTitle] = useState('')
@@ -21,49 +23,149 @@ export default function AdminDashboard() {
   const [addingTask, setAddingTask] = useState(false)
 
   useEffect(() => {
-    async function checkAdminAndFetchData() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          router.push('/login')
-          return
-        }
+    fetchAdminData()
+  }, [])
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-
-        if (!profile || !profile.is_admin) {
-          alert('Access Denied! You are not an Admin.')
-          router.push('/dashboard')
-          return
-        }
-
-        const { data: allUsers } = await supabase
-          .from('profiles')
-          .select('*')
-          .order('created_at', { ascending: false })
-
-        if (allUsers) setUsers(allUsers)
-
-        const { data: tasksData } = await supabase
-          .from('tasks')
-          .select('*')
-          .eq('status', 'pending')
-
-        if (tasksData) setPendingTasks(tasksData)
-
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
+  async function fetchAdminData() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
       }
-    }
 
-    checkAdminAndFetchData()
-  }, [router])
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile || !profile.is_admin) {
+        alert('Access Denied! You are not an Admin.')
+        router.push('/dashboard')
+        return
+      }
+
+      // Fetch Users
+      const { data: allUsers } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (allUsers) setUsers(allUsers)
+
+      // Fetch Pending Tasks
+      const { data: tasksData } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('status', 'pending')
+      if (tasksData) setPendingTasks(tasksData)
+
+      // Fetch Pending Deposits
+      const { data: depositsData } = await supabase
+        .from('deposits')
+        .select('*, profiles(full_name, email, balance)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      if (depositsData) setDeposits(depositsData)
+
+      // Fetch Pending Withdrawals
+      const { data: withdrawalsData } = await supabase
+        .from('withdrawals')
+        .select('*, profiles(full_name, email, balance)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      if (withdrawalsData) setWithdrawals(withdrawalsData)
+
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // --- DEPOSIT ACCEPT LOGIC ---
+  const handleApproveDeposit = async (deposit) => {
+    try {
+      // 1. Add amount to user's balance
+      const currentBalance = deposit.profiles?.balance || 0
+      const newBalance = currentBalance + Number(deposit.amount)
+
+      const { error: balanceError } = await supabase
+        .from('profiles')
+        .update({ balance: newBalance })
+        .eq('id', deposit.user_id)
+
+      if (balanceError) throw balanceError
+
+      // 2. Mark deposit status as approved
+      const { error: depositError } = await supabase
+        .from('deposits')
+        .update({ status: 'approved' })
+        .eq('id', deposit.id)
+
+      if (depositError) throw depositError
+
+      alert(`Deposit of $${deposit.amount} approved successfully!`)
+      setDeposits(deposits.filter(d => d.id !== deposit.id))
+      
+      // Update users list locally
+      setUsers(users.map(u => u.id === deposit.user_id ? { ...u, balance: newBalance } : u))
+    } catch (err) {
+      alert('Error approving deposit: ' + err.message)
+    }
+  }
+
+  const handleRejectDeposit = async (depositId) => {
+    const { error } = await supabase
+      .from('deposits')
+      .update({ status: 'rejected' })
+      .eq('id', depositId)
+
+    if (error) {
+      alert('Error rejecting deposit: ' + error.message)
+    } else {
+      alert('Deposit rejected.')
+      setDeposits(deposits.filter(d => d.id !== depositId))
+    }
+  }
+
+  // --- WITHDRAWAL APPROVE LOGIC ---
+  const handleApproveWithdrawal = async (withdrawalId) => {
+    const { error } = await supabase
+      .from('withdrawals')
+      .update({ status: 'approved' })
+      .eq('id', withdrawalId)
+
+    if (error) {
+      alert('Error approving withdrawal: ' + error.message)
+    } else {
+      alert('Withdrawal request marked as completed!')
+      setWithdrawals(withdrawals.filter(w => w.id !== withdrawalId))
+    }
+  }
+
+  const handleRejectWithdrawal = async (withdrawal) => {
+    try {
+      // Refund user balance if rejected
+      const currentBalance = withdrawal.profiles?.balance || 0
+      const refundedBalance = currentBalance + Number(withdrawal.amount)
+
+      await supabase
+        .from('profiles')
+        .update({ balance: refundedBalance })
+        .eq('id', withdrawal.user_id)
+
+      await supabase
+        .from('withdrawals')
+        .update({ status: 'rejected' })
+        .eq('id', withdrawal.id)
+
+      alert('Withdrawal rejected and balance refunded.')
+      setWithdrawals(withdrawals.filter(w => w.id !== withdrawal.id))
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
+  }
 
   const handleUpdateUser = async (userId, newBalance, newVip) => {
     const { error } = await supabase
@@ -147,9 +249,90 @@ export default function AdminDashboard() {
               <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" /> Admin Control Panel
               </h1>
-              <p className="text-xs text-slate-400">Manage users and tasks</p>
+              <p className="text-xs text-slate-400">Manage users, deposits, and withdrawals</p>
             </div>
           </div>
+        </div>
+
+        {/* PENDING DEPOSITS */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+            <ArrowDownLeft className="w-4 h-4" /> Deposit Requests ({deposits.length})
+          </h2>
+
+          {deposits.length === 0 ? (
+            <p className="text-xs text-slate-500">No pending deposit requests.</p>
+          ) : (
+            <div className="space-y-3">
+              {deposits.map((d) => (
+                <div key={d.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
+                  <div>
+                    <p className="font-bold text-slate-200">{d.profiles?.full_name || 'User'} ({d.profiles?.email})</p>
+                    <p className="text-emerald-400 font-bold mt-0.5">Amount: ${d.amount} USDT</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Trx ID: <span className="text-slate-200 font-mono">{d.trx_id}</span> | Method: {d.method}</p>
+                    {d.proof_url && (
+                      <a href={d.proof_url} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 underline block mt-0.5">
+                        View Payment Proof
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleApproveDeposit(d)}
+                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Accept Deposit
+                    </button>
+                    <button
+                      onClick={() => handleRejectDeposit(d.id)}
+                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                    >
+                      <XCircle className="w-3.5 h-3.5" /> Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* PENDING WITHDRAWALS */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <h2 className="text-sm font-bold text-rose-400 flex items-center gap-2">
+            <ArrowUpRight className="w-4 h-4" /> Withdrawal Requests ({withdrawals.length})
+          </h2>
+
+          {withdrawals.length === 0 ? (
+            <p className="text-xs text-slate-500">No pending withdrawal requests.</p>
+          ) : (
+            <div className="space-y-3">
+              {withdrawals.map((w) => (
+                <div key={w.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
+                  <div>
+                    <p className="font-bold text-slate-200">{w.profiles?.full_name || 'User'} ({w.profiles?.email})</p>
+                    <p className="text-rose-400 font-bold mt-0.5">Amount: ${w.amount} USDT</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Account: <span className="text-slate-200 font-mono">{w.account_number}</span> ({w.method})</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleApproveWithdrawal(w.id)}
+                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Mark Paid
+                    </button>
+                    <button
+                      onClick={() => handleRejectWithdrawal(w)}
+                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                    >
+                      <XCircle className="w-3.5 h-3.5" /> Reject & Refund
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* PENDING TASKS */}
@@ -323,46 +506,4 @@ function UserRow({ user, onUpdate }) {
   return (
     <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
       <div>
-        <p className="font-bold text-slate-200">{user.full_name || 'No Name'}</p>
-        <p className="text-[10px] text-slate-500">{user.email}</p>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <div>
-          <span className="text-[10px] text-slate-500 block">Balance ($)</span>
-          <input
-            type="number"
-            step="0.1"
-            value={balance}
-            onChange={(e) => setBalance(e.target.value)}
-            className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200 focus:outline-none text-xs"
-          />
-        </div>
-
-        <div>
-          <span className="text-[10px] text-slate-500 block">VIP Level</span>
-          <select
-            value={vipLevel}
-            onChange={(e) => setVipLevel(e.target.value)}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-amber-400 font-bold focus:outline-none text-xs"
-          >
-            <option value="0">VIP 0</option>
-            <option value="1">VIP 1</option>
-            <option value="2">VIP 2</option>
-            <option value="3">VIP 3</option>
-            <option value="4">VIP 4</option>
-            <option value="5">VIP 5</option>
-          </select>
-        </div>
-
-        <button
-          onClick={() => onUpdate(user.id, parseFloat(balance), parseInt(vipLevel))}
-          className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 font-bold rounded-lg transition text-xs flex items-center gap-1 mt-3"
-        >
-          <Save className="w-3 h-3" /> Save
-        </button>
-      </div>
-    </div>
-  )
-                  }
-          
+    
