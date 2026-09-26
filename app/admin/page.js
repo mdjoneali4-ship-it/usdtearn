@@ -1,3 +1,4 @@
+
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -11,7 +12,7 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([])
   const [pendingTasks, setPendingTasks] = useState([])
   const [withdrawals, setWithdrawals] = useState([]) 
-  const [deposits, setDeposits] = useState([]) // ডিপোজিট রিকোয়েস্টের জন্য স্টেট
+  const [deposits, setDeposits] = useState([]) 
   const [searchTerm, setSearchTerm] = useState('')
   
   // New Task Form State
@@ -43,7 +44,6 @@ export default function AdminDashboard() {
         return
       }
 
-      // Fetch all users
       const { data: allUsers } = await supabase
         .from('profiles')
         .select('*')
@@ -51,7 +51,6 @@ export default function AdminDashboard() {
 
       if (allUsers) setUsers(allUsers)
 
-      // Fetch pending user tasks
       const { data: tasksData } = await supabase
         .from('tasks')
         .select('*')
@@ -59,7 +58,6 @@ export default function AdminDashboard() {
 
       if (tasksData) setPendingTasks(tasksData)
 
-      // Fetch pending withdrawals
       const { data: withdrawData } = await supabase
         .from('withdrawals')
         .select('*, profiles(full_name, email)')
@@ -68,7 +66,6 @@ export default function AdminDashboard() {
 
       if (withdrawData) setWithdrawals(withdrawData)
 
-      // Fetch deposits
       const { data: depositData } = await supabase
         .from('deposits')
         .select('*, profiles(full_name, email)')
@@ -82,7 +79,6 @@ export default function AdminDashboard() {
     checkAdminAndFetchData()
   }, [router])
 
-  // Update User VIP or Balance
   const handleUpdateUser = async (userId, newBalance, newVip) => {
     const { error } = await supabase
       .from('profiles')
@@ -97,7 +93,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Create New Task (Admin direct)
   const handleCreateTask = async (e) => {
     e.preventDefault()
     setAddingTask(true)
@@ -126,7 +121,6 @@ export default function AdminDashboard() {
     setAddingTask(false)
   }
 
-  // Approve or Reject User Submitted Task
   const handleTaskStatus = async (taskId, newStatus) => {
     const { error } = await supabase
       .from('tasks')
@@ -141,7 +135,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Approve or Reject Withdrawal Request
   const handleWithdrawStatus = async (withdrawId, userId, amount, status) => {
     const { error: updateError } = await supabase
       .from('withdrawals')
@@ -170,7 +163,6 @@ export default function AdminDashboard() {
     setWithdrawals(withdrawals.filter(w => w.id !== withdrawId))
   }
 
-  // Approve or Reject Deposit Request
   const handleDepositAction = async (depositId, userId, amount, status) => {
     const { error: updateError } = await supabase
       .from('deposits')
@@ -182,7 +174,6 @@ export default function AdminDashboard() {
       return
     }
 
-    // যদি ডিপোজিট অ্যাপ্রুভ করা হয়, তবে ইউজারের ব্যালেন্সে ডলার যোগ হয়ে যাবে
     if (status === 'approved') {
       const targetUser = users.find(u => u.id === userId)
       if (targetUser) {
@@ -219,7 +210,6 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* Header */}
         <div className="flex justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-2xl">
           <div className="flex items-center gap-3">
             <Link href="/dashboard" className="p-2 bg-slate-800 rounded-xl text-slate-300">
@@ -476,4 +466,23 @@ export default function AdminDashboard() {
               />
               <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
             </div>
-          </di
+          </div>
+
+          <div className="space-y-3">
+            {filteredUsers.map((u) => (
+              <UserRow key={u.id} user={u} onUpdate={handleUpdateUser} />
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
+function UserRow({ user, onUpdate }) {
+  const [balance, setBalance] = useState(user.balance || 0)
+  const [vipLevel, setVipLevel] = useState(user.vip_level || 0)
+
+  return (
+    <div className="p-3.5 bg-slat
