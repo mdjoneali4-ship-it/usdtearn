@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock, Wallet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function AdminDashboard() {
@@ -10,11 +10,12 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState([])
   const [pendingTasks, setPendingTasks] = useState([])
+  const [withdrawals, setWithdrawals] = useState([]) // উইথড্র রিকোয়েস্টের জন্য স্টেট
   const [searchTerm, setSearchTerm] = useState('')
   
   // New Task Form State
   const [taskTitle, setTaskTitle] = useState('')
-  const [taskDescription, setTaskDescription] = useState('') // New Description State
+  const [taskDescription, setTaskDescription] = useState('')
   const [taskReward, setTaskReward] = useState('')
   const [taskType, setTaskType] = useState('public')
   const [minVip, setMinVip] = useState(0)
@@ -57,6 +58,15 @@ export default function AdminDashboard() {
 
       if (tasksData) setPendingTasks(tasksData)
 
+      // Fetch pending withdrawals
+      const { data: withdrawData } = await supabase
+        .from('withdrawals')
+        .select('*, profiles(full_name, email)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+
+      if (withdrawData) setWithdrawals(withdrawData)
+
       setLoading(false)
     }
 
@@ -86,7 +96,7 @@ export default function AdminDashboard() {
     const { error } = await supabase.from('tasks').insert([
       {
         title: taskTitle,
-        description: taskDescription, // Insert Description
+        description: taskDescription,
         reward: parseFloat(taskReward),
         task_type: taskType,
         min_vip_level: parseInt(minVip),
@@ -122,6 +132,37 @@ export default function AdminDashboard() {
     }
   }
 
+  // Approve or Reject Withdrawal Request
+  const handleWithdrawStatus = async (withdrawId, userId, amount, status) => {
+    // ১. উইথড্র স্ট্যাটাস আপডেট করা
+    const { error: updateError } = await supabase
+      .from('withdrawals')
+      .update({ status: status })
+      .eq('id', withdrawId)
+
+    if (updateError) {
+      alert('Error updating withdrawal: ' + updateError.message)
+      return
+    }
+
+    // ২. যদি রিজেক্ট করা হয়, তবে ইউজারের ব্যালেন্স আবার রিফান্ড করে দেওয়া
+    if (status === 'rejected') {
+      const targetUser = users.find(u => u.id === userId)
+      if (targetUser) {
+        const refundedBalance = (targetUser.balance || 0) + amount
+        await supabase
+          .from('profiles')
+          .update({ balance: refundedBalance })
+          .eq('id', userId)
+
+        setUsers(users.map(u => u.id === userId ? { ...u, balance: refundedBalance } : u))
+      }
+    }
+
+    alert(`Withdrawal request ${status}!`)
+    setWithdrawals(withdrawals.filter(w => w.id !== withdrawId))
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
@@ -149,12 +190,51 @@ export default function AdminDashboard() {
               <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" /> Admin Control Panel
               </h1>
-              <p className="text-xs text-slate-400">Manage users, approve user tasks, and post direct tasks</p>
+              <p className="text-xs text-slate-400">Manage users, withdrawals, tasks, and payouts</p>
             </div>
           </div>
         </div>
 
-        {/* SECTION 1: PENDING USER SUBMITTED TASKS */}
+        {/* SECTION 1: PENDING WITHDRAWAL REQUESTS */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <h2 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
+            <Wallet className="w-4 h-4" /> Pending Withdrawal Requests ({withdrawals.length})
+          </h2>
+
+          {withdrawals.length === 0 ? (
+            <p className="text-xs text-slate-500">No pending withdrawal requests right now.</p>
+          ) : (
+            <div className="space-y-3">
+              {withdrawals.map((w) => (
+                <div key={w.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
+                  <div>
+                    <p className="font-bold text-slate-200">{w.profiles?.full_name || 'User'} <span className="text-[10px] text-slate-500">({w.profiles?.email})</span></p>
+                    <p className="text-emerald-400 font-semibold mt-0.5">Method: <span className="uppercase text-white">{w.method}</span></p>
+                    <p className="text-slate-300">Account/Address: <span className="text-amber-400 font-mono">{w.account_number}</span></p>
+                    <p className="text-cyan-400 font-bold mt-1">Amount: ${w.amount.toFixed(2)} USDT</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleWithdrawStatus(w.id, w.user_id, w.amount, 'approved')}
+                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Approve
+                    </button>
+                    <button
+                      onClick={() => handleWithdrawStatus(w.id, w.user_id, w.amount, 'rejected')}
+                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                    >
+                      <XCircle className="w-3.5 h-3.5" /> Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 2: PENDING USER SUBMITTED TASKS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2">
             <Clock className="w-4 h-4" /> Pending User Task Requests ({pendingTasks.length})
@@ -195,7 +275,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* SECTION 2: ADD NEW TASK (DIRECT WITH DESCRIPTION SLOT) */}
+        {/* SECTION 3: ADD NEW TASK (DIRECT) */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Admin Task
@@ -227,14 +307,13 @@ export default function AdminDashboard() {
               />
             </div>
 
-            {/* Description Slot Added Here */}
             <div className="md:col-span-2">
               <label className="text-slate-400 font-semibold">Task Description / Instructions</label>
               <textarea
                 rows="3"
                 value={taskDescription}
                 onChange={(e) => setTaskDescription(e.target.value)}
-                placeholder="Explain step-by-step how users should complete this task (e.g., 1. Click link, 2. Watch video, 3. Send username)"
+                placeholder="Explain step-by-step instructions..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
               />
             </div>
@@ -288,7 +367,7 @@ export default function AdminDashboard() {
           </form>
         </div>
 
-        {/* SECTION 3: USER MANAGEMENT */}
+        {/* SECTION 4: USER MANAGEMENT */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <div className="flex justify-between items-center flex-wrap gap-2">
             <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -367,4 +446,5 @@ function UserRow({ user, onUpdate }) {
       </div>
     </div>
   )
-}
+    }
+            
