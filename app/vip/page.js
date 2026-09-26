@@ -10,11 +10,13 @@ export default function VIPPage() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // VIP Plans (VIP 1, VIP 2 = 500, VIP 3 = 750, VIP 4 = 1000)
   const vipPlans = [
-    { level: 0, name: 'VIP 0', price: 0, dailyTasks: 2, taskReward: 0.10, dailyIncome: 0.20 },
-    { level: 1, name: 'VIP 1', price: 10, dailyTasks: 5, taskReward: 0.50, dailyIncome: 2.50 },
-    { level: 2, name: 'VIP 2', price: 50, dailyTasks: 10, taskReward: 1.20, dailyIncome: 12.00 },
-    { level: 3, name: 'VIP 3', price: 200, dailyTasks: 20, taskReward: 2.50, dailyIncome: 50.00 },
+    { level: 0, name: 'VIP 0 (Free)', price: 0, dailyTasks: 2, taskReward: 0.10, dailyIncome: 0.20 },
+    { level: 1, name: 'VIP 1 Standard', price: 10, dailyTasks: 5, taskReward: 0.50, dailyIncome: 2.50 },
+    { level: 2, name: 'VIP 2 Pro', price: 500, dailyTasks: 15, taskReward: 2.00, dailyIncome: 30.00 },
+    { level: 3, name: 'VIP 3 Elite', price: 750, dailyTasks: 25, taskReward: 2.50, dailyIncome: 62.50 },
+    { level: 4, name: 'VIP 4 Master', price: 1000, dailyTasks: 40, taskReward: 3.00, dailyIncome: 120.00 },
   ]
 
   useEffect(() => {
@@ -88,7 +90,7 @@ export default function VIPPage() {
                     <div>
                       <h2 className="text-lg font-bold text-slate-100">{plan.name}</h2>
                       <p className="text-2xl font-extrabold text-amber-400 mt-1">
-                        ${plan.price} <span className="text-xs text-slate-400 font-normal">USDT</span>
+                        ${plan.price} <span className="text-xs text-slate-400 font-normal">USDT / TK</span>
                       </p>
                     </div>
                     <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
@@ -103,10 +105,10 @@ export default function VIPPage() {
                       <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Daily Tasks: <strong>{plan.dailyTasks}</strong>
                     </li>
                     <li className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Reward Per Task: <strong>${plan.taskReward} USDT</strong>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Reward Per Task: <strong>${plan.taskReward}</strong>
                     </li>
                     <li className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Daily Max Profit: <strong>${plan.dailyIncome} USDT</strong>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Daily Max Profit: <strong>${plan.dailyIncome}</strong>
                     </li>
                   </ul>
                 </div>
@@ -120,7 +122,7 @@ export default function VIPPage() {
                       : 'bg-amber-500 hover:bg-amber-600 text-slate-950'
                   }`}
                 >
-                  {isCurrent ? 'Active Level' : `Unlock for $${plan.price} USDT`}
+                  {isCurrent ? 'Active Level' : `Unlock for $${plan.price}`}
                 </button>
               </div>
             )
@@ -129,5 +131,4 @@ export default function VIPPage() {
       </div>
     </div>
   )
-    }
-                  
+                  }
