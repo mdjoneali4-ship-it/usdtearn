@@ -1,4 +1,3 @@
-
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -15,7 +14,6 @@ export default function AdminDashboard() {
   const [deposits, setDeposits] = useState([]) 
   const [searchTerm, setSearchTerm] = useState('')
   
-  // New Task Form State
   const [taskTitle, setTaskTitle] = useState('')
   const [taskDescription, setTaskDescription] = useState('')
   const [taskReward, setTaskReward] = useState('')
@@ -130,7 +128,7 @@ export default function AdminDashboard() {
     if (error) {
       alert('Error updating task: ' + error.message)
     } else {
-      alert(`Task ${newStatus}!`)
+      alert('Task status updated!')
       setPendingTasks(pendingTasks.filter(t => t.id !== taskId))
     }
   }
@@ -159,7 +157,7 @@ export default function AdminDashboard() {
       }
     }
 
-    alert(`Withdrawal request ${status}!`)
+    alert('Withdrawal request updated!')
     setWithdrawals(withdrawals.filter(w => w.id !== withdrawId))
   }
 
@@ -187,7 +185,7 @@ export default function AdminDashboard() {
       }
     }
 
-    alert(`Deposit request ${status}!`)
+    alert('Deposit request updated!')
     setDeposits(deposits.map(d => d.id === depositId ? { ...d, status } : d))
   }
 
@@ -485,4 +483,4 @@ function UserRow({ user, onUpdate }) {
   const [vipLevel, setVipLevel] = useState(user.vip_level || 0)
 
   return (
-    <div className="p-3.5 bg-slat
+    <div className="p-3.5 bg-slate-950 border border-slate-8
