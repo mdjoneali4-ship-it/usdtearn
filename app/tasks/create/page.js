@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 export default function CreateTaskPage() {
   const router = useRouter()
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('') // New Description State
   const [reward, setReward] = useState('')
   const [link, setLink] = useState('')
   const [loading, setLoading] = useState(false)
@@ -26,6 +27,7 @@ export default function CreateTaskPage() {
     const { error } = await supabase.from('tasks').insert([
       {
         title,
+        description, // Insert Description to Database
         reward: parseFloat(reward),
         link: link || '#',
         task_type: 'public',
@@ -75,6 +77,19 @@ export default function CreateTaskPage() {
             />
           </div>
 
+          {/* Task Description Slot Added Here */}
+          <div>
+            <label className="text-slate-400 font-semibold block mb-1">Task Description / Instructions</label>
+            <textarea
+              required
+              rows="3"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Explain step-by-step instructions for workers (e.g. 1. Go to link, 2. Join group, 3. Send screenshot)"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
           <div>
             <label className="text-slate-400 font-semibold block mb-1">Reward Per User ($ USDT)</label>
             <input
@@ -113,5 +128,4 @@ export default function CreateTaskPage() {
       </div>
     </div>
   )
-    }
-                
+}
