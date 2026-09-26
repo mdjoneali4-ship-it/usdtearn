@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock, Wallet } from 'lucide-react'
+import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock, Wallet, DollarSign } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function AdminDashboard() {
@@ -10,7 +10,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState([])
   const [pendingTasks, setPendingTasks] = useState([])
-  const [withdrawals, setWithdrawals] = useState([]) // উইথড্র রিকোয়েস্টের জন্য স্টেট
+  const [withdrawals, setWithdrawals] = useState([]) 
+  const [deposits, setDeposits] = useState([]) // ডিপোজিট রিকোয়েস্টের জন্য স্টেট
   const [searchTerm, setSearchTerm] = useState('')
   
   // New Task Form State
@@ -66,6 +67,14 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: false })
 
       if (withdrawData) setWithdrawals(withdrawData)
+
+      // Fetch deposits
+      const { data: depositData } = await supabase
+        .from('deposits')
+        .select('*, profiles(full_name, email)')
+        .order('created_at', { ascending: false })
+
+      if (depositData) setDeposits(depositData)
 
       setLoading(false)
     }
@@ -134,7 +143,6 @@ export default function AdminDashboard() {
 
   // Approve or Reject Withdrawal Request
   const handleWithdrawStatus = async (withdrawId, userId, amount, status) => {
-    // ১. উইথড্র স্ট্যাটাস আপডেট করা
     const { error: updateError } = await supabase
       .from('withdrawals')
       .update({ status: status })
@@ -145,7 +153,6 @@ export default function AdminDashboard() {
       return
     }
 
-    // ২. যদি রিজেক্ট করা হয়, তবে ইউজারের ব্যালেন্স আবার রিফান্ড করে দেওয়া
     if (status === 'rejected') {
       const targetUser = users.find(u => u.id === userId)
       if (targetUser) {
@@ -163,6 +170,36 @@ export default function AdminDashboard() {
     setWithdrawals(withdrawals.filter(w => w.id !== withdrawId))
   }
 
+  // Approve or Reject Deposit Request
+  const handleDepositAction = async (depositId, userId, amount, status) => {
+    const { error: updateError } = await supabase
+      .from('deposits')
+      .update({ status: status })
+      .eq('id', depositId)
+
+    if (updateError) {
+      alert('Error updating deposit: ' + updateError.message)
+      return
+    }
+
+    // যদি ডিপোজিট অ্যাপ্রুভ করা হয়, তবে ইউজারের ব্যালেন্সে ডলার যোগ হয়ে যাবে
+    if (status === 'approved') {
+      const targetUser = users.find(u => u.id === userId)
+      if (targetUser) {
+        const newBalance = parseFloat((targetUser.balance || 0) + parseFloat(amount)).toFixed(4)
+        await supabase
+          .from('profiles')
+          .update({ balance: parseFloat(newBalance) })
+          .eq('id', userId)
+
+        setUsers(users.map(u => u.id === userId ? { ...u, balance: parseFloat(newBalance) } : u))
+      }
+    }
+
+    alert(`Deposit request ${status}!`)
+    setDeposits(deposits.map(d => d.id === depositId ? { ...d, status } : d))
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
@@ -175,6 +212,8 @@ export default function AdminDashboard() {
     u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  const pendingDeposits = deposits.filter(d => d.status === 'pending')
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 pb-20">
@@ -190,12 +229,65 @@ export default function AdminDashboard() {
               <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" /> Admin Control Panel
               </h1>
-              <p className="text-xs text-slate-400">Manage users, withdrawals, tasks, and payouts</p>
+              <p className="text-xs text-slate-400">Manage users, deposits, withdrawals, and tasks</p>
             </div>
           </div>
         </div>
 
-        {/* SECTION 1: PENDING WITHDRAWAL REQUESTS */}
+        {/* SECTION 1: DEPOSIT REQUESTS */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+            <DollarSign className="w-4 h-4" /> User Deposit Requests ({pendingDeposits.length} Pending)
+          </h2>
+
+          {deposits.length === 0 ? (
+            <p className="text-xs text-slate-500">No deposit requests found.</p>
+          ) : (
+            <div className="space-y-3">
+              {deposits.map((item) => (
+                <div key={item.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
+                  <div className="space-y-1">
+                    <p className="text-slate-300">User: <span className="text-emerald-400 font-semibold">{item.profiles?.email || 'N/A'}</span></p>
+                    <p className="text-slate-200 font-bold">Amount: ${item.amount} ({item.method})</p>
+                    <p className="text-slate-400">TrxID: <span className="text-amber-400 font-mono">{item.trx_id}</span></p>
+                    {item.proof_url && (
+                      <a href={item.proof_url} target="_blank" rel="noreferrer" className="text-blue-400 underline block pt-0.5">
+                        View Screenshot Proof
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {item.status === 'pending' ? (
+                      <>
+                        <button
+                          onClick={() => handleDepositAction(item.id, item.user_id, item.amount, 'approved')}
+                          className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleDepositAction(item.id, item.user_id, item.amount, 'rejected')}
+                          className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Reject
+                        </button>
+                      </>
+                    ) : (
+                      <span className={`px-3 py-1.5 rounded-lg font-bold uppercase text-[10px] ${
+                        item.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      }`}>
+                        {item.status}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 2: PENDING WITHDRAWAL REQUESTS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
             <Wallet className="w-4 h-4" /> Pending Withdrawal Requests ({withdrawals.length})
@@ -234,7 +326,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* SECTION 2: PENDING USER SUBMITTED TASKS */}
+        {/* SECTION 3: PENDING USER SUBMITTED TASKS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2">
             <Clock className="w-4 h-4" /> Pending User Task Requests ({pendingTasks.length})
@@ -275,7 +367,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* SECTION 3: ADD NEW TASK (DIRECT) */}
+        {/* SECTION 4: ADD NEW TASK (DIRECT) */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Admin Task
@@ -367,7 +459,7 @@ export default function AdminDashboard() {
           </form>
         </div>
 
-        {/* SECTION 4: USER MANAGEMENT */}
+        {/* SECTION 5: USER MANAGEMENT */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <div className="flex justify-between items-center flex-wrap gap-2">
             <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -384,67 +476,4 @@ export default function AdminDashboard() {
               />
               <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
             </div>
-          </div>
-
-          <div className="space-y-3">
-            {filteredUsers.map((u) => (
-              <UserRow key={u.id} user={u} onUpdate={handleUpdateUser} />
-            ))}
-          </div>
-        </div>
-
-      </div>
-    </div>
-  )
-}
-
-function UserRow({ user, onUpdate }) {
-  const [balance, setBalance] = useState(user.balance || 0)
-  const [vipLevel, setVipLevel] = useState(user.vip_level || 0)
-
-  return (
-    <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
-      <div>
-        <p className="font-bold text-slate-200">{user.full_name || 'No Name'}</p>
-        <p className="text-[10px] text-slate-500">{user.email}</p>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <div>
-          <span className="text-[10px] text-slate-500 block">Balance ($)</span>
-          <input
-            type="number"
-            step="0.1"
-            value={balance}
-            onChange={(e) => setBalance(e.target.value)}
-            className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200 focus:outline-none text-xs"
-          />
-        </div>
-
-        <div>
-          <span className="text-[10px] text-slate-500 block">VIP Level</span>
-          <select
-            value={vipLevel}
-            onChange={(e) => setVipLevel(e.target.value)}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-amber-400 font-bold focus:outline-none text-xs"
-          >
-            <option value="0">VIP 0</option>
-            <option value="1">VIP 1</option>
-            <option value="2">VIP 2</option>
-            <option value="3">VIP 3</option>
-            <option value="4">VIP 4</option>
-            <option value="5">VIP 5</option>
-          </select>
-        </div>
-
-        <button
-          onClick={() => onUpdate(user.id, parseFloat(balance), parseInt(vipLevel))}
-          className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 font-bold rounded-lg transition text-xs flex items-center gap-1 mt-3"
-        >
-          <Save className="w-3 h-3" /> Save
-        </button>
-      </div>
-    </div>
-  )
-    }
-            
+          </di
