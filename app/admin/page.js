@@ -32,12 +32,12 @@ export default function AdminDashboard() {
   const [taskDescription, setTaskDescription] = useState('')
   const [taskReward, setTaskReward] = useState('')
   const [taskType, setTaskType] = useState('public')
-  const [minVip, setMinVip] = useState(0)
+  const [minVip, setMinVip] = useState('0')
   const [taskLink, setTaskLink] = useState('')
   const [addingTask, setAddingTask] = useState(false)
 
   useEffect(() => {
-    async function checkAdminAndFetchData() {
+    async function loadAdminData() {
       try {
         const {
           data: { user },
@@ -65,57 +65,49 @@ export default function AdminDashboard() {
           .select('*')
           .order('created_at', { ascending: false })
 
-        if (allUsers) {
-          setUsers(allUsers)
-        }
+        setUsers(allUsers || [])
 
-        const { data: tasksData } = await supabase
+        const { data: tasks } = await supabase
           .from('tasks')
           .select('*')
           .eq('status', 'pending')
           .order('created_at', { ascending: false })
 
-        if (tasksData) {
-          setPendingTasks(tasksData)
-        }
+        setPendingTasks(tasks || [])
 
-        const { data: withdrawData } = await supabase
+        const { data: withdraws } = await supabase
           .from('withdrawals')
           .select('*, profiles(full_name, email)')
           .eq('status', 'pending')
           .order('created_at', { ascending: false })
 
-        if (withdrawData) {
-          setWithdrawals(withdrawData)
-        }
+        setWithdrawals(withdraws || [])
 
-        const { data: depositData } = await supabase
+        const { data: depositList } = await supabase
           .from('deposits')
           .select('*, profiles(full_name, email)')
           .order('created_at', { ascending: false })
 
-        if (depositData) {
-          setDeposits(depositData)
-        }
+        setDeposits(depositList || [])
       } catch (error) {
-        console.error('Admin dashboard error:', error)
-        alert('Something went wrong while loading admin data.')
+        console.error(error)
+        alert('Failed to load admin panel.')
       } finally {
         setLoading(false)
       }
     }
 
-    checkAdminAndFetchData()
+    loadAdminData()
   }, [router])
 
   const handleUpdateUser = async (userId, newBalance, newVip) => {
-    const balance = parseFloat(newBalance) || 0
-    const vip = parseInt(newVip) || 0
+    const balance = Number(newBalance) || 0
+    const vip = Number(newVip) || 0
 
     const { error } = await supabase
       .from('profiles')
       .update({
-        balance,
+        balance: balance,
         vip_level: vip,
       })
       .eq('id', userId)
@@ -125,30 +117,30 @@ export default function AdminDashboard() {
       return
     }
 
-    alert('User updated successfully!')
-
-    setUsers((currentUsers) =>
-      currentUsers.map((user) =>
+    setUsers((oldUsers) =>
+      oldUsers.map((user) =>
         user.id === userId
           ? {
               ...user,
-              balance,
+              balance: balance,
               vip_level: vip,
             }
           : user
       )
     )
+
+    alert('User updated successfully!')
   }
 
   const handleCreateTask = async (e) => {
     e.preventDefault()
 
+    const reward = Number(taskReward)
+
     if (!taskTitle.trim()) {
       alert('Please enter task title.')
       return
     }
-
-    const reward = parseFloat(taskReward)
 
     if (Number.isNaN(reward) || reward < 0) {
       alert('Please enter a valid reward.')
@@ -161,9 +153,9 @@ export default function AdminDashboard() {
       {
         title: taskTitle.trim(),
         description: taskDescription.trim(),
-        reward,
+        reward: reward,
         task_type: taskType,
-        min_vip_level: parseInt(minVip) || 0,
+        min_vip_level: Number(minVip),
         link: taskLink.trim() || '#',
         status: 'approved',
       },
@@ -178,19 +170,17 @@ export default function AdminDashboard() {
       setTaskDescription('')
       setTaskReward('')
       setTaskType('public')
-      setMinVip(0)
+      setMinVip('0')
       setTaskLink('')
     }
 
     setAddingTask(false)
   }
 
-  const handleTaskStatus = async (taskId, newStatus) => {
+  const handleTaskStatus = async (taskId, status) => {
     const { error } = await supabase
       .from('tasks')
-      .update({
-        status: newStatus,
-      })
+      .update({ status: status })
       .eq('id', taskId)
 
     if (error) {
@@ -198,11 +188,11 @@ export default function AdminDashboard() {
       return
     }
 
-    alert('Task status updated!')
-
-    setPendingTasks((currentTasks) =>
-      currentTasks.filter((task) => task.id !== taskId)
+    setPendingTasks((oldTasks) =>
+      oldTasks.filter((task) => task.id !== taskId)
     )
+
+    alert('Task status updated!')
   }
 
   const handleWithdrawStatus = async (
@@ -211,24 +201,22 @@ export default function AdminDashboard() {
     amount,
     status
   ) => {
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from('withdrawals')
-      .update({
-        status,
-      })
+      .update({ status: status })
       .eq('id', withdrawId)
 
-    if (updateError) {
-      alert('Error updating withdrawal: ' + updateError.message)
+    if (error) {
+      alert('Error updating withdrawal: ' + error.message)
       return
     }
 
     if (status === 'rejected') {
-      const targetUser = users.find((user) => user.id === userId)
+      const user = users.find((item) => item.id === userId)
 
-      if (targetUser) {
+      if (user) {
         const refundedBalance =
-          Number(targetUser.balance || 0) + Number(amount || 0)
+          Number(user.balance || 0) + Number(amount || 0)
 
         const { error: refundError } = await supabase
           .from('profiles')
@@ -238,28 +226,28 @@ export default function AdminDashboard() {
           .eq('id', userId)
 
         if (refundError) {
-          alert('Withdrawal rejected, but refund failed: ' + refundError.message)
+          alert('Refund failed: ' + refundError.message)
           return
         }
 
-        setUsers((currentUsers) =>
-          currentUsers.map((user) =>
-            user.id === userId
+        setUsers((oldUsers) =>
+          oldUsers.map((item) =>
+            item.id === userId
               ? {
-                  ...user,
+                  ...item,
                   balance: refundedBalance,
                 }
-              : user
+              : item
           )
         )
       }
     }
 
-    alert('Withdrawal request updated!')
-
-    setWithdrawals((currentWithdrawals) =>
-      currentWithdrawals.filter((item) => item.id !== withdrawId)
+    setWithdrawals((oldWithdrawals) =>
+      oldWithdrawals.filter((item) => item.id !== withdrawId)
     )
+
+    alert('Withdrawal request updated!')
   }
 
   const handleDepositAction = async (
@@ -268,24 +256,22 @@ export default function AdminDashboard() {
     amount,
     status
   ) => {
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from('deposits')
-      .update({
-        status,
-      })
+      .update({ status: status })
       .eq('id', depositId)
 
-    if (updateError) {
-      alert('Error updating deposit: ' + updateError.message)
+    if (error) {
+      alert('Error updating deposit: ' + error.message)
       return
     }
 
     if (status === 'approved') {
-      const targetUser = users.find((user) => user.id === userId)
+      const user = users.find((item) => item.id === userId)
 
-      if (targetUser) {
+      if (user) {
         const newBalance =
-          Number(targetUser.balance || 0) + Number(amount || 0)
+          Number(user.balance || 0) + Number(amount || 0)
 
         const { error: balanceError } = await supabase
           .from('profiles')
@@ -295,38 +281,35 @@ export default function AdminDashboard() {
           .eq('id', userId)
 
         if (balanceError) {
-          alert(
-            'Deposit approved, but balance update failed: ' +
-              balanceError.message
-          )
+          alert('Balance update failed: ' + balanceError.message)
           return
         }
 
-        setUsers((currentUsers) =>
-          currentUsers.map((user) =>
-            user.id === userId
+        setUsers((oldUsers) =>
+          oldUsers.map((item) =>
+            item.id === userId
               ? {
-                  ...user,
+                  ...item,
                   balance: newBalance,
                 }
-              : user
+              : item
           )
         )
       }
     }
 
-    alert('Deposit request updated!')
-
-    setDeposits((currentDeposits) =>
-      currentDeposits.map((deposit) =>
-        deposit.id === depositId
+    setDeposits((oldDeposits) =>
+      oldDeposits.map((item) =>
+        item.id === depositId
           ? {
-              ...deposit,
-              status,
+              ...item,
+              status: status,
             }
-          : deposit
+          : item
       )
     )
+
+    alert('Deposit request updated!')
   }
 
   if (loading) {
@@ -343,8 +326,8 @@ export default function AdminDashboard() {
     const search = searchTerm.toLowerCase()
 
     return (
-      user.email?.toLowerCase().includes(search) ||
-      user.full_name?.toLowerCase().includes(search)
+      (user.email || '').toLowerCase().includes(search) ||
+      (user.full_name || '').toLowerCase().includes(search)
     )
   })
 
@@ -379,7 +362,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* SECTION 1: DEPOSITS */}
+        {/* DEPOSIT REQUESTS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
             <DollarSign className="w-4 h-4" />
@@ -406,7 +389,7 @@ export default function AdminDashboard() {
                     </p>
 
                     <p className="text-slate-200 font-bold">
-                      Amount: ${item.amount} ({item.method})
+                      Amount: ${item.amount || 0} ({item.method || 'N/A'})
                     </p>
 
                     <p className="text-slate-400">
@@ -421,7 +404,7 @@ export default function AdminDashboard() {
                         href={item.proof_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-blue-400 underline block pt-0.5"
+                        className="text-blue-400 underline block"
                       >
                         View Screenshot Proof
                       </a>
@@ -432,6 +415,7 @@ export default function AdminDashboard() {
                     {item.status === 'pending' ? (
                       <>
                         <button
+                          type="button"
                           onClick={() =>
                             handleDepositAction(
                               item.id,
@@ -440,13 +424,14 @@ export default function AdminDashboard() {
                               'approved'
                             )
                           }
-                          className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                          className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg font-bold flex items-center gap-1"
                         >
                           <CheckCircle className="w-3.5 h-3.5" />
                           Approve
                         </button>
 
                         <button
+                          type="button"
                           onClick={() =>
                             handleDepositAction(
                               item.id,
@@ -455,7 +440,7 @@ export default function AdminDashboard() {
                               'rejected'
                             )
                           }
-                          className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                          className="px-3 py-1.5 bg-rose-500/20 text-rose-400 rounded-lg font-bold flex items-center gap-1"
                         >
                           <XCircle className="w-3.5 h-3.5" />
                           Reject
@@ -465,8 +450,8 @@ export default function AdminDashboard() {
                       <span
                         className={`px-3 py-1.5 rounded-lg font-bold uppercase text-[10px] ${
                           item.status === 'approved'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-rose-500/10 text-rose-400'
                         }`}
                       >
                         {item.status}
@@ -479,7 +464,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* SECTION 2: WITHDRAWALS */}
+        {/* WITHDRAWAL REQUESTS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
             <Wallet className="w-4 h-4" />
@@ -492,65 +477,68 @@ export default function AdminDashboard() {
             </p>
           ) : (
             <div className="space-y-3">
-              {withdrawals.map((withdrawal) => (
+              {withdrawals.map((item) => (
                 <div
-                  key={withdrawal.id}
+                  key={item.id}
                   className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs"
                 >
                   <div>
                     <p className="font-bold text-slate-200">
-                      {withdrawal.profiles?.full_name || 'User'}{' '}
-                      <span className="text-[10px] text-slate-500">
-                        ({withdrawal.profiles?.email || 'N/A'})
-                      </span>
+                      {item.profiles?.full_name || 'User'}
                     </p>
 
-                    <p className="text-emerald-400 font-semibold mt-0.5">
+                    <p className="text-[10px] text-slate-500">
+                      {item.profiles?.email || 'N/A'}
+                    </p>
+
+                    <p className="text-emerald-400 font-semibold mt-1">
                       Method:{' '}
-                      <span className="uppercase text-white">
-                        {withdrawal.method || 'N/A'}
+                      <span className="text-white uppercase">
+                        {item.method || 'N/A'}
                       </span>
                     </p>
 
                     <p className="text-slate-300">
-                      Account/Address:{' '}
+                      Account:{' '}
                       <span className="text-amber-400 font-mono">
-                        {withdrawal.account_number || 'N/A'}
+                        {item.account_number || 'N/A'}
                       </span>
                     </p>
 
                     <p className="text-cyan-400 font-bold mt-1">
                       Amount: $
-                      {Number(withdrawal.amount || 0).toFixed(2)} USDT
+                      {Number(item.amount || 0).toFixed(2)} USDT
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() =>
                         handleWithdrawStatus(
-                          withdrawal.id,
-                          withdrawal.user_id,
-                          withdrawal.amount,
+                          item.id,
+                          item.user_id,
+                          item.amount,
                           'approved'
                         )
                       }
-                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg font-bold flex items-center gap-1"
                     >
                       <CheckCircle className="w-3.5 h-3.5" />
                       Approve
                     </button>
 
                     <button
+                      type="button"
                       onClick={() =>
                         handleWithdrawStatus(
-                          withdrawal.id,
-                          withdrawal.user_id,
-                          withdrawal.amount,
+                          item.id,
+                          item.user_id,
+                          item.amount,
                           'rejected'
                         )
                       }
-                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 rounded-lg font-bold flex items-center gap-1"
                     >
                       <XCircle className="w-3.5 h-3.5" />
                       Reject
@@ -562,7 +550,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* SECTION 3: PENDING TASKS */}
+        {/* PENDING TASKS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2">
             <Clock className="w-4 h-4" />
@@ -586,13 +574,13 @@ export default function AdminDashboard() {
                     </h3>
 
                     {task.description && (
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-slate-400 mt-1">
                         {task.description}
                       </p>
                     )}
 
                     <p className="text-[10px] text-emerald-400 font-semibold mt-1">
-                      Reward: ${task.reward}
+                      Reward: ${task.reward || 0}
                     </p>
 
                     {task.link && (
@@ -600,29 +588,31 @@ export default function AdminDashboard() {
                         href={task.link}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-[10px] text-indigo-400 underline truncate block max-w-xs mt-0.5"
+                        className="text-[10px] text-indigo-400 underline block truncate max-w-xs"
                       >
                         {task.link}
                       </a>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() =>
                         handleTaskStatus(task.id, 'approved')
                       }
-                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg font-bold flex items-center gap-1"
                     >
                       <CheckCircle className="w-3.5 h-3.5" />
                       Approve
                     </button>
 
                     <button
+                      type="button"
                       onClick={() =>
                         handleTaskStatus(task.id, 'rejected')
                       }
-                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 rounded-lg font-bold flex items-center gap-1"
                     >
                       <XCircle className="w-3.5 h-3.5" />
                       Reject
@@ -631,18 +621,6 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
-          )}
-        </div>
-
-        {/* SECTION 4: ADD TASK */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-          <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            Add Admin Task
-          </h2>
-
-          <form
-            onSubmit={handleCreateTask}
-            className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs"
-          >
- 
+          )
+         }
+                      
