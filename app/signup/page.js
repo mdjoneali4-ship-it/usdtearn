@@ -1,137 +1,136 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { User, Mail, Lock, UserPlus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-export default function Signup() {
+export default function SignupPage() {
   const router = useRouter()
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' })
+  const searchParams = useSearchParams()
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [referralCode, setReferralCode] = useState('')
   const [loading, setLoading] = useState(false)
-  const [statusMsg, setStatusMsg] = useState('')
+
+  useEffect(() => {
+    const ref = searchParams.get('ref')
+    if (ref) {
+      setReferralCode(ref.toUpperCase())
+    }
+  }, [searchParams])
 
   const handleSignup = async (e) => {
     e.preventDefault()
     setLoading(true)
-    setStatusMsg('Connecting to database...')
 
-    try {
-      // 1. Supabase Auth Call
-      const { data, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-      })
+    // 1. Auth Signup
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+    })
 
-      if (authError) {
-        alert('Auth Error: ' + authError.message)
-        setStatusMsg('Error: ' + authError.message)
-        setLoading(false)
-        return
-      }
-
-      // 2. Profile Creation Call
-      if (data?.user) {
-        setStatusMsg('Creating profile...')
-        const { error: profileError } = await supabase.from('profiles').insert([
-          { id: data.user.id, email: formData.email, full_name: formData.name, balance: 0 }
-        ])
-
-        if (profileError) {
-          alert('Profile Error: ' + profileError.message)
-          setStatusMsg('Error: ' + profileError.message)
-        } else {
-          alert('Account created successfully!')
-          router.push('/login')
-        }
-      }
-    } catch (err) {
-      alert('System Exception: ' + err.message)
-      setStatusMsg('Exception: ' + err.message)
+    if (authError) {
+      alert(authError.message)
+      setLoading(false)
+      return
     }
 
+    // 2. Profile Creation with Referral Code
+    if (authData.user) {
+      const { error: profileError } = await supabase.from('profiles').insert([
+        {
+          id: authData.user.id,
+          full_name: fullName,
+          email: email,
+          balance: 0.00,
+          vip_level: 0,
+          referred_by: referralCode ? referralCode.trim().toUpperCase() : null,
+        },
+      ])
+
+      if (profileError) {
+        alert('Profile error: ' + profileError.message)
+      } else {
+        alert('Registration successful!')
+        router.push('/dashboard')
+      }
+    }
     setLoading(false)
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
-            Create USDTEarn Account
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">Start earning USDT with micro-tasks</p>
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-slate-100">Create Account</h1>
+          <p className="text-xs text-slate-400 mt-1">Start earning micro-rewards today</p>
         </div>
-
-        {statusMsg && (
-          <div className="p-3 mb-4 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-center">
-            {statusMsg}
-          </div>
-        )}
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
-            <label className="text-xs font-semibold text-slate-300">Full Name</label>
-            <div className="relative mt-1">
-              <User className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
-              <input 
-                type="text" 
-                required
-                placeholder="John Doe" 
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
-              />
-            </div>
+            <label className="text-xs text-slate-400 font-semibold">Full Name</label>
+            <input
+              type="text"
+              required
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 mt-1 focus:outline-none focus:border-emerald-500"
+              placeholder="John Doe"
+            />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-300">Email Address</label>
-            <div className="relative mt-1">
-              <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
-              <input 
-                type="email" 
-                required
-                placeholder="name@example.com" 
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
-              />
-            </div>
+            <label className="text-xs text-slate-400 font-semibold">Email Address</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 mt-1 focus:outline-none focus:border-emerald-500"
+              placeholder="user@example.com"
+            />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-300">Password</label>
-            <div className="relative mt-1">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
-              <input 
-                type="password" 
-                required
-                placeholder="••••••••" 
-                value={formData.password}
-                onChange={(e) => setFormData({...formData, password: e.target.value})}
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
-              />
-            </div>
+            <label className="text-xs text-slate-400 font-semibold">Password</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 mt-1 focus:outline-none focus:border-emerald-500"
+              placeholder="••••••••"
+            />
           </div>
 
-          <button 
-            type="submit" 
+          <div>
+            <label className="text-xs text-slate-400 font-semibold">Referral Code (Optional)</label>
+            <input
+              type="text"
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-amber-400 font-bold mt-1 focus:outline-none focus:border-amber-500"
+              placeholder="EX: A1B2C3"
+            />
+          </div>
+
+          <button
+            type="submit"
             disabled={loading}
-            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 font-bold text-slate-950 rounded-xl text-xs transition mt-2"
           >
-            <UserPlus className="w-4 h-4" /> {loading ? 'Processing...' : 'Create Account'}
+            {loading ? 'Creating account...' : 'Sign Up'}
           </button>
         </form>
 
-        <p className="text-xs text-center text-slate-400 mt-6">
+        <p className="text-center text-xs text-slate-400">
           Already have an account?{' '}
-          <Link href="/signup" className="text-emerald-400 hover:underline">
+          <Link href="/login" className="text-emerald-400 font-bold hover:underline">
             Log In
           </Link>
         </p>
       </div>
     </div>
   )
-          }
-                  
+}
