@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
   Wallet, CheckCircle2, Users, Crown, ArrowUpRight, 
-  ArrowDownLeft, LogOut, ShieldCheck, Zap, Sparkles, Award 
+  ArrowDownLeft, LogOut, ShieldCheck, Zap, Sparkles, Award, ExternalLink 
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [completedCount, setCompletedCount] = useState(0)
+  const [recentTasks, setRecentTasks] = useState([])
 
   useEffect(() => {
     async function loadUserData() {
@@ -38,6 +39,17 @@ export default function Dashboard() {
         .eq('user_id', user.id)
 
       if (count !== null) setCompletedCount(count)
+
+      // 3. Fetch Recent Approved Tasks (Top 3 for Dashboard preview)
+      const { data: tasksData } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(3)
+
+      if (tasksData) setRecentTasks(tasksData)
+
       setLoading(false)
     }
 
@@ -88,26 +100,25 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* TRUST BANNER / 100% SECURE GUARANTEE */}
-        <div className="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/30 p-4 rounded-2xl flex items-center justify-between gap-4 shadow-lg shadow-emerald-950/20">
+        {/* TRUST BANNER */}
+        <div className="bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/30 p-4 rounded-2xl flex items-center justify-between gap-4 shadow-lg">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl">
               <Sparkles className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <h2 className="text-xs font-bold text-emerald-400 tracking-wide">100% SECURED & VERIFIED PAYOUTS</h2>
-              <p className="text-[11px] text-slate-300">Instant manual & automated task verification with guaranteed rewards.</p>
+              <p className="text-[11px] text-slate-300">Complete micro-tasks below or visit Task Center to earn instant USDT.</p>
             </div>
           </div>
           <span className="hidden sm:inline-block text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
-            Active System
+            Active
           </span>
         </div>
 
         {/* BALANCE & VIP CARD */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           
-          {/* Main Balance Box */}
           <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-6 rounded-3xl relative overflow-hidden shadow-xl">
             <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl"></div>
             <p className="text-xs font-semibold text-slate-400 flex items-center gap-1">
@@ -133,7 +144,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* VIP Level Box */}
           <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-6 rounded-3xl relative overflow-hidden shadow-xl flex flex-col justify-between">
             <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl"></div>
             <div>
@@ -186,46 +196,89 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* NAVIGATION / ACTION MENU */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-3 shadow-xl">
-          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Quick Navigation</h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Link 
-              href="/tasks" 
-              className="p-3.5 bg-slate-950 border border-slate-800 hover:border-emerald-500/50 rounded-2xl flex items-center justify-between transition group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl group-hover:scale-110 transition">
-                  <Zap className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs text-slate-200">Task Center</h4>
-                  <p className="text-[10px] text-slate-400">Complete tasks & earn USDT</p>
-                </div>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition" />
-            </Link>
-
-            <Link 
-              href="/referrals" 
-              className="p-3.5 bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-2xl flex items-center justify-between transition group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl group-hover:scale-110 transition">
-                  <Users className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs text-slate-200">Referral Hub</h4>
-                  <p className="text-[10px] text-slate-400">Invite friends & earn commission</p>
-                </div>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition" />
+        {/* HOT AVAILABLE TASKS PREVIEW SECTION */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Zap className="w-4 h-4" /> Hot Available Tasks
+            </h3>
+            <Link href="/tasks" className="text-[11px] font-bold text-indigo-400 hover:underline flex items-center gap-1">
+              View All Tasks <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           </div>
+
+          {recentTasks.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-4">No active tasks right now. Check back soon!</p>
+          ) : (
+            <div className="space-y-3">
+              {recentTasks.map((task) => (
+                <div key={task.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl flex flex-wrap justify-between items-center gap-3">
+                  <div>
+                    <h4 className="font-bold text-xs text-slate-200">{task.title}</h4>
+                    <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">Reward: +${task.reward} USDT</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {task.link && task.link !== '#' && (
+                      <a 
+                        href={task.link} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl transition"
+                        title="Visit Link"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                    <Link 
+                      href="/tasks" 
+                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl transition"
+                    >
+                      Start Task
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* RECENT WITHDRAWAL PROOF BANNER (Builds Trust) */}
+        {/* QUICK NAVIGATION MENU */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Link 
+            href="/tasks" 
+            className="p-4 bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-2xl flex items-center justify-between transition group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl group-hover:scale-110 transition">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-slate-200">Task Center</h4>
+                <p className="text-[10px] text-slate-400">Browse & complete all micro-tasks</p>
+              </div>
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition" />
+          </Link>
+
+          <Link 
+            href="/referrals" 
+            className="p-4 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-2xl flex items-center justify-between transition group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl group-hover:scale-110 transition">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-slate-200">Referral Hub</h4>
+                <p className="text-[10px] text-slate-400">Invite friends & earn bonus</p>
+              </div>
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition" />
+          </Link>
+        </div>
+
+        {/* RECENT WITHDRAWAL PROOF BANNER */}
         <div className="bg-slate-900/60 border border-slate-800/80 p-4 rounded-2xl text-center space-y-1">
           <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1 font-medium">
             <Award className="w-3.5 h-3.5 text-amber-400" /> Platform Payout Status: <span className="text-emerald-400 font-bold">100% Operational & Fast</span>
@@ -236,5 +289,5 @@ export default function Dashboard() {
       </div>
     </div>
   )
-          }
-                
+      }
+                  
