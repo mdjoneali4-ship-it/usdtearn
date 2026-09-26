@@ -2,14 +2,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Users, CheckSquare, ShieldCheck, Plus, Search, Save } from 'lucide-react'
+import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function AdminDashboard() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
   const [users, setUsers] = useState([])
+  const [pendingTasks, setPendingTasks] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   
   // New Task Form State
@@ -40,8 +40,6 @@ export default function AdminDashboard() {
         return
       }
 
-      setIsAdmin(true)
-
       // Fetch all users
       const { data: allUsers } = await supabase
         .from('profiles')
@@ -49,6 +47,15 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: false })
 
       if (allUsers) setUsers(allUsers)
+
+      // Fetch pending user tasks
+      const { data: tasksData } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('status', 'pending')
+
+      if (tasksData) setPendingTasks(tasksData)
+
       setLoading(false)
     }
 
@@ -70,7 +77,7 @@ export default function AdminDashboard() {
     }
   }
 
-  // Create New Task
+  // Create New Task (Admin direct)
   const handleCreateTask = async (e) => {
     e.preventDefault()
     setAddingTask(true)
@@ -81,7 +88,8 @@ export default function AdminDashboard() {
         reward: parseFloat(taskReward),
         task_type: taskType,
         min_vip_level: parseInt(minVip),
-        link: taskLink || '#'
+        link: taskLink || '#',
+        status: 'approved'
       }
     ])
 
@@ -94,6 +102,21 @@ export default function AdminDashboard() {
       setTaskLink('')
     }
     setAddingTask(false)
+  }
+
+  // Approve or Reject User Submitted Task
+  const handleTaskStatus = async (taskId, newStatus) => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: newStatus })
+      .eq('id', taskId)
+
+    if (error) {
+      alert('Error updating task: ' + error.message)
+    } else {
+      alert(`Task ${newStatus}!`)
+      setPendingTasks(pendingTasks.filter(t => t.id !== taskId))
+    }
   }
 
   if (loading) {
@@ -123,15 +146,55 @@ export default function AdminDashboard() {
               <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" /> Admin Control Panel
               </h1>
-              <p className="text-xs text-slate-400">Manage users, update VIP tiers, and post new tasks</p>
+              <p className="text-xs text-slate-400">Manage users, approve user tasks, and post direct tasks</p>
             </div>
           </div>
         </div>
 
-        {/* SECTION 1: ADD NEW TASK */}
+        {/* SECTION 1: PENDING USER SUBMITTED TASKS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2">
-            <Plus className="w-4 h-4" /> Add New Task
+            <Clock className="w-4 h-4" /> Pending User Task Requests ({pendingTasks.length})
+          </h2>
+
+          {pendingTasks.length === 0 ? (
+            <p className="text-xs text-slate-500">No pending task requests right now.</p>
+          ) : (
+            <div className="space-y-3">
+              {pendingTasks.map((t) => (
+                <div key={t.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
+                  <div>
+                    <h3 className="font-bold text-slate-200">{t.title}</h3>
+                    <p className="text-[10px] text-emerald-400 font-semibold">Reward: ${t.reward}</p>
+                    <a href={t.link} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 underline truncate block max-w-xs">
+                      {t.link}
+                    </a>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTaskStatus(t.id, 'approved')}
+                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Approve
+                    </button>
+                    <button
+                      onClick={() => handleTaskStatus(t.id, 'rejected')}
+                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
+                    >
+                      <XCircle className="w-3.5 h-3.5" /> Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 2: ADD NEW TASK (DIRECT) */}
+        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Admin Task
           </h2>
 
           <form onSubmit={handleCreateTask} className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
@@ -155,7 +218,7 @@ export default function AdminDashboard() {
                 required
                 value={taskReward}
                 onChange={(e) => setTaskReward(e.target.value)}
-                placeholder="e.g. 0.05 or 0.50"
+                placeholder="e.g. 0.05"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
               />
             </div>
@@ -209,7 +272,7 @@ export default function AdminDashboard() {
           </form>
         </div>
 
-        {/* SECTION 2: USER MANAGEMENT */}
+        {/* SECTION 3: USER MANAGEMENT */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <div className="flex justify-between items-center flex-wrap gap-2">
             <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -288,4 +351,5 @@ function UserRow({ user, onUpdate }) {
       </div>
     </div>
   )
-}
+                                  }
+          
