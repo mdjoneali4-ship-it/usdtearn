@@ -14,6 +14,7 @@ export default function AdminDashboard() {
   
   // New Task Form State
   const [taskTitle, setTaskTitle] = useState('')
+  const [taskDescription, setTaskDescription] = useState('') // New Description State
   const [taskReward, setTaskReward] = useState('')
   const [taskType, setTaskType] = useState('public')
   const [minVip, setMinVip] = useState(0)
@@ -85,6 +86,7 @@ export default function AdminDashboard() {
     const { error } = await supabase.from('tasks').insert([
       {
         title: taskTitle,
+        description: taskDescription, // Insert Description
         reward: parseFloat(taskReward),
         task_type: taskType,
         min_vip_level: parseInt(minVip),
@@ -98,6 +100,7 @@ export default function AdminDashboard() {
     } else {
       alert('New task added successfully!')
       setTaskTitle('')
+      setTaskDescription('')
       setTaskReward('')
       setTaskLink('')
     }
@@ -165,8 +168,9 @@ export default function AdminDashboard() {
                 <div key={t.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
                   <div>
                     <h3 className="font-bold text-slate-200">{t.title}</h3>
-                    <p className="text-[10px] text-emerald-400 font-semibold">Reward: ${t.reward}</p>
-                    <a href={t.link} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 underline truncate block max-w-xs">
+                    {t.description && <p className="text-[11px] text-slate-400 mt-0.5">{t.description}</p>}
+                    <p className="text-[10px] text-emerald-400 font-semibold mt-1">Reward: ${t.reward}</p>
+                    <a href={t.link} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 underline truncate block max-w-xs mt-0.5">
                       {t.link}
                     </a>
                   </div>
@@ -191,7 +195,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* SECTION 2: ADD NEW TASK (DIRECT) */}
+        {/* SECTION 2: ADD NEW TASK (DIRECT WITH DESCRIPTION SLOT) */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Admin Task
@@ -219,6 +223,18 @@ export default function AdminDashboard() {
                 value={taskReward}
                 onChange={(e) => setTaskReward(e.target.value)}
                 placeholder="e.g. 0.05"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
+              />
+            </div>
+
+            {/* Description Slot Added Here */}
+            <div className="md:col-span-2">
+              <label className="text-slate-400 font-semibold">Task Description / Instructions</label>
+              <textarea
+                rows="3"
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                placeholder="Explain step-by-step how users should complete this task (e.g., 1. Click link, 2. Watch video, 3. Send username)"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
               />
             </div>
@@ -351,5 +367,4 @@ function UserRow({ user, onUpdate }) {
       </div>
     </div>
   )
-                                  }
-          
+}
