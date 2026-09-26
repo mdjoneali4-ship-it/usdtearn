@@ -28,8 +28,8 @@ export default function AdminDashboard() {
 
   async function fetchAdminData() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError || !user) {
         router.push('/login')
         return
       }
@@ -38,7 +38,7 @@ export default function AdminDashboard() {
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
       if (!profile || !profile.is_admin) {
         alert('Access Denied! You are not an Admin.')
@@ -46,38 +46,46 @@ export default function AdminDashboard() {
         return
       }
 
-      // Fetch Users
+      // Fetch Users safely
       const { data: allUsers } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false })
       if (allUsers) setUsers(allUsers)
 
-      // Fetch Pending Tasks
+      // Fetch Tasks safely
       const { data: tasksData } = await supabase
         .from('tasks')
         .select('*')
         .eq('status', 'pending')
       if (tasksData) setPendingTasks(tasksData)
 
-      // Fetch Pending Deposits
-      const { data: depositsData } = await supabase
-        .from('deposits')
-        .select('*, profiles(full_name, email, balance)')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-      if (depositsData) setDeposits(depositsData)
+      // Fetch Deposits safely
+      try {
+        const { data: depositsData } = await supabase
+          .from('deposits')
+          .select('*, profiles(full_name, email, balance)')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+        if (depositsData) setDeposits(depositsData)
+      } catch (e) {
+        console.warn('Deposits table not ready yet')
+      }
 
-      // Fetch Pending Withdrawals
-      const { data: withdrawalsData } = await supabase
-        .from('withdrawals')
-        .select('*, profiles(full_name, email, balance)')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-      if (withdrawalsData) setWithdrawals(withdrawalsData)
+      // Fetch Withdrawals safely
+      try {
+        const { data: withdrawalsData } = await supabase
+          .from('withdrawals')
+          .select('*, profiles(full_name, email, balance)')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+        if (withdrawalsData) setWithdrawals(withdrawalsData)
+      } catch (e) {
+        console.warn('Withdrawals table not ready yet')
+      }
 
     } catch (err) {
-      console.error(err)
+      console.error("Admin fetch error:", err)
     } finally {
       setLoading(false)
     }
@@ -86,9 +94,8 @@ export default function AdminDashboard() {
   // --- DEPOSIT ACCEPT LOGIC ---
   const handleApproveDeposit = async (deposit) => {
     try {
-      // 1. Add amount to user's balance
-      const currentBalance = deposit.profiles?.balance || 0
-      const newBalance = currentBalance + Number(deposit.amount)
+      const currentBalance = Number(deposit.profiles?.balance || 0)
+      const newBalance = currentBalance + Number(deposit.amount || 0)
 
       const { error: balanceError } = await supabase
         .from('profiles')
@@ -97,7 +104,6 @@ export default function AdminDashboard() {
 
       if (balanceError) throw balanceError
 
-      // 2. Mark deposit status as approved
       const { error: depositError } = await supabase
         .from('deposits')
         .update({ status: 'approved' })
@@ -107,8 +113,6 @@ export default function AdminDashboard() {
 
       alert(`Deposit of $${deposit.amount} approved successfully!`)
       setDeposits(deposits.filter(d => d.id !== deposit.id))
-      
-      // Update users list locally
       setUsers(users.map(u => u.id === deposit.user_id ? { ...u, balance: newBalance } : u))
     } catch (err) {
       alert('Error approving deposit: ' + err.message)
@@ -146,9 +150,8 @@ export default function AdminDashboard() {
 
   const handleRejectWithdrawal = async (withdrawal) => {
     try {
-      // Refund user balance if rejected
-      const currentBalance = withdrawal.profiles?.balance || 0
-      const refundedBalance = currentBalance + Number(withdrawal.amount)
+      const currentBalance = Number(withdrawal.profiles?.balance || 0)
+      const refundedBalance = currentBalance + Number(withdrawal.amount || 0)
 
       await supabase
         .from('profiles')
@@ -189,9 +192,9 @@ export default function AdminDashboard() {
       {
         title: taskTitle,
         description: taskDescription,
-        reward: parseFloat(taskReward),
+        reward: parseFloat(taskReward || 0),
         task_type: taskType,
-        min_vip_level: parseInt(minVip),
+        min_vip_level: parseInt(minVip || 0),
         link: taskLink || '#',
         status: 'approved'
       }
@@ -267,7 +270,7 @@ export default function AdminDashboard() {
               {deposits.map((d) => (
                 <div key={d.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
                   <div>
-                    <p className="font-bold text-slate-200">{d.profiles?.full_name || 'User'} ({d.profiles?.email})</p>
+                    <p className="font-bold text-slate-200">{d.profiles?.full_name || 'User'} ({d.profiles?.email || 'N/A'})</p>
                     <p className="text-emerald-400 font-bold mt-0.5">Amount: ${d.amount} USDT</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">Trx ID: <span className="text-slate-200 font-mono">{d.trx_id}</span> | Method: {d.method}</p>
                     {d.proof_url && (
@@ -310,7 +313,7 @@ export default function AdminDashboard() {
               {withdrawals.map((w) => (
                 <div key={w.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
                   <div>
-                    <p className="font-bold text-slate-200">{w.profiles?.full_name || 'User'} ({w.profiles?.email})</p>
+                    <p className="font-bold text-slate-200">{w.profiles?.full_name || 'User'} ({w.profiles?.email || 'N/A'})</p>
                     <p className="text-rose-400 font-bold mt-0.5">Amount: ${w.amount} USDT</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">Account: <span className="text-slate-200 font-mono">{w.account_number}</span> ({w.method})</p>
                   </div>
@@ -498,3 +501,9 @@ export default function AdminDashboard() {
     </div>
   )
 }
+
+function UserRow({ user, onUpdate }) {
+  const [balance, setBalance] = useState(user.balance || 0)
+  const [vipLevel, setVipLevel] = useState(user.vip_level || 0)
+
+            
