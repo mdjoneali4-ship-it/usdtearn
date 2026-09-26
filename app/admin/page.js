@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock, Wallet, DollarSign } from 'lucide-react'
+import { ArrowLeft, Users, ShieldCheck, Plus, Search, Save, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function AdminDashboard() {
@@ -10,8 +10,6 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState([])
   const [pendingTasks, setPendingTasks] = useState([])
-  const [withdrawals, setWithdrawals] = useState([]) 
-  const [deposits, setDeposits] = useState([]) 
   const [searchTerm, setSearchTerm] = useState('')
   
   const [taskTitle, setTaskTitle] = useState('')
@@ -24,54 +22,44 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function checkAdminAndFetchData() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.push('/login')
+          return
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        if (!profile || !profile.is_admin) {
+          alert('Access Denied! You are not an Admin.')
+          router.push('/dashboard')
+          return
+        }
+
+        const { data: allUsers } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (allUsers) setUsers(allUsers)
+
+        const { data: tasksData } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('status', 'pending')
+
+        if (tasksData) setPendingTasks(tasksData)
+
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
       }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (!profile || !profile.is_admin) {
-        alert('Access Denied! You are not an Admin.')
-        router.push('/dashboard')
-        return
-      }
-
-      const { data: allUsers } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (allUsers) setUsers(allUsers)
-
-      const { data: tasksData } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('status', 'pending')
-
-      if (tasksData) setPendingTasks(tasksData)
-
-      const { data: withdrawData } = await supabase
-        .from('withdrawals')
-        .select('*, profiles(full_name, email)')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-
-      if (withdrawData) setWithdrawals(withdrawData)
-
-      const { data: depositData } = await supabase
-        .from('deposits')
-        .select('*, profiles(full_name, email)')
-        .order('created_at', { ascending: false })
-
-      if (depositData) setDeposits(depositData)
-
-      setLoading(false)
     }
 
     checkAdminAndFetchData()
@@ -133,62 +121,6 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleWithdrawStatus = async (withdrawId, userId, amount, status) => {
-    const { error: updateError } = await supabase
-      .from('withdrawals')
-      .update({ status: status })
-      .eq('id', withdrawId)
-
-    if (updateError) {
-      alert('Error updating withdrawal: ' + updateError.message)
-      return
-    }
-
-    if (status === 'rejected') {
-      const targetUser = users.find(u => u.id === userId)
-      if (targetUser) {
-        const refundedBalance = (targetUser.balance || 0) + amount
-        await supabase
-          .from('profiles')
-          .update({ balance: refundedBalance })
-          .eq('id', userId)
-
-        setUsers(users.map(u => u.id === userId ? { ...u, balance: refundedBalance } : u))
-      }
-    }
-
-    alert('Withdrawal request updated!')
-    setWithdrawals(withdrawals.filter(w => w.id !== withdrawId))
-  }
-
-  const handleDepositAction = async (depositId, userId, amount, status) => {
-    const { error: updateError } = await supabase
-      .from('deposits')
-      .update({ status: status })
-      .eq('id', depositId)
-
-    if (updateError) {
-      alert('Error updating deposit: ' + updateError.message)
-      return
-    }
-
-    if (status === 'approved') {
-      const targetUser = users.find(u => u.id === userId)
-      if (targetUser) {
-        const newBalance = parseFloat((targetUser.balance || 0) + parseFloat(amount)).toFixed(4)
-        await supabase
-          .from('profiles')
-          .update({ balance: parseFloat(newBalance) })
-          .eq('id', userId)
-
-        setUsers(users.map(u => u.id === userId ? { ...u, balance: parseFloat(newBalance) } : u))
-      }
-    }
-
-    alert('Deposit request updated!')
-    setDeposits(deposits.map(d => d.id === depositId ? { ...d, status } : d))
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
@@ -201,8 +133,6 @@ export default function AdminDashboard() {
     u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
-
-  const pendingDeposits = deposits.filter(d => d.status === 'pending')
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 pb-20">
@@ -217,107 +147,15 @@ export default function AdminDashboard() {
               <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" /> Admin Control Panel
               </h1>
-              <p className="text-xs text-slate-400">Manage users, deposits, withdrawals, and tasks</p>
+              <p className="text-xs text-slate-400">Manage users and tasks</p>
             </div>
           </div>
         </div>
 
-        {/* SECTION 1: DEPOSIT REQUESTS */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-          <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-            <DollarSign className="w-4 h-4" /> User Deposit Requests ({pendingDeposits.length} Pending)
-          </h2>
-
-          {deposits.length === 0 ? (
-            <p className="text-xs text-slate-500">No deposit requests found.</p>
-          ) : (
-            <div className="space-y-3">
-              {deposits.map((item) => (
-                <div key={item.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
-                  <div className="space-y-1">
-                    <p className="text-slate-300">User: <span className="text-emerald-400 font-semibold">{item.profiles?.email || 'N/A'}</span></p>
-                    <p className="text-slate-200 font-bold">Amount: ${item.amount} ({item.method})</p>
-                    <p className="text-slate-400">TrxID: <span className="text-amber-400 font-mono">{item.trx_id}</span></p>
-                    {item.proof_url && (
-                      <a href={item.proof_url} target="_blank" rel="noreferrer" className="text-blue-400 underline block pt-0.5">
-                        View Screenshot Proof
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {item.status === 'pending' ? (
-                      <>
-                        <button
-                          onClick={() => handleDepositAction(item.id, item.user_id, item.amount, 'approved')}
-                          className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" /> Approve
-                        </button>
-                        <button
-                          onClick={() => handleDepositAction(item.id, item.user_id, item.amount, 'rejected')}
-                          className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
-                        >
-                          <XCircle className="w-3.5 h-3.5" /> Reject
-                        </button>
-                      </>
-                    ) : (
-                      <span className={`px-3 py-1.5 rounded-lg font-bold uppercase text-[10px] ${
-                        item.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                      }`}>
-                        {item.status}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* SECTION 2: PENDING WITHDRAWAL REQUESTS */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-          <h2 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
-            <Wallet className="w-4 h-4" /> Pending Withdrawal Requests ({withdrawals.length})
-          </h2>
-
-          {withdrawals.length === 0 ? (
-            <p className="text-xs text-slate-500">No pending withdrawal requests right now.</p>
-          ) : (
-            <div className="space-y-3">
-              {withdrawals.map((w) => (
-                <div key={w.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
-                  <div>
-                    <p className="font-bold text-slate-200">{w.profiles?.full_name || 'User'} <span className="text-[10px] text-slate-500">({w.profiles?.email})</span></p>
-                    <p className="text-emerald-400 font-semibold mt-0.5">Method: <span className="uppercase text-white">{w.method}</span></p>
-                    <p className="text-slate-300">Account/Address: <span className="text-amber-400 font-mono">{w.account_number}</span></p>
-                    <p className="text-cyan-400 font-bold mt-1">Amount: ${w.amount.toFixed(2)} USDT</p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleWithdrawStatus(w.id, w.user_id, w.amount, 'approved')}
-                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" /> Approve
-                    </button>
-                    <button
-                      onClick={() => handleWithdrawStatus(w.id, w.user_id, w.amount, 'rejected')}
-                      className="px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg font-bold flex items-center gap-1 transition"
-                    >
-                      <XCircle className="w-3.5 h-3.5" /> Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* SECTION 3: PENDING USER SUBMITTED TASKS */}
+        {/* PENDING TASKS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Pending User Task Requests ({pendingTasks.length})
+            <Clock className="w-4 h-4" /> Pending User Tasks ({pendingTasks.length})
           </h2>
 
           {pendingTasks.length === 0 ? (
@@ -355,7 +193,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* SECTION 4: ADD NEW TASK (DIRECT) */}
+        {/* ADD TASK */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Admin Task
@@ -388,12 +226,12 @@ export default function AdminDashboard() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-slate-400 font-semibold">Task Description / Instructions</label>
+              <label className="text-slate-400 font-semibold">Task Description</label>
               <textarea
                 rows="3"
                 value={taskDescription}
                 onChange={(e) => setTaskDescription(e.target.value)}
-                placeholder="Explain step-by-step instructions..."
+                placeholder="Explain instructions..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
               />
             </div>
@@ -411,7 +249,7 @@ export default function AdminDashboard() {
             </div>
 
             <div>
-              <label className="text-slate-400 font-semibold">Min VIP Level Needed</label>
+              <label className="text-slate-400 font-semibold">Min VIP Level</label>
               <select
                 value={minVip}
                 onChange={(e) => setMinVip(e.target.value)}
@@ -427,7 +265,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-slate-400 font-semibold">Task Link / URL</label>
+              <label className="text-slate-400 font-semibold">Task Link</label>
               <input
                 type="text"
                 value={taskLink}
@@ -447,7 +285,7 @@ export default function AdminDashboard() {
           </form>
         </div>
 
-        {/* SECTION 5: USER MANAGEMENT */}
+        {/* USER MANAGEMENT */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <div className="flex justify-between items-center flex-wrap gap-2">
             <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -477,3 +315,54 @@ export default function AdminDashboard() {
     </div>
   )
 }
+
+function UserRow({ user, onUpdate }) {
+  const [balance, setBalance] = useState(user.balance || 0)
+  const [vipLevel, setVipLevel] = useState(user.vip_level || 0)
+
+  return (
+    <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-3 text-xs">
+      <div>
+        <p className="font-bold text-slate-200">{user.full_name || 'No Name'}</p>
+        <p className="text-[10px] text-slate-500">{user.email}</p>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <div>
+          <span className="text-[10px] text-slate-500 block">Balance ($)</span>
+          <input
+            type="number"
+            step="0.1"
+            value={balance}
+            onChange={(e) => setBalance(e.target.value)}
+            className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200 focus:outline-none text-xs"
+          />
+        </div>
+
+        <div>
+          <span className="text-[10px] text-slate-500 block">VIP Level</span>
+          <select
+            value={vipLevel}
+            onChange={(e) => setVipLevel(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-amber-400 font-bold focus:outline-none text-xs"
+          >
+            <option value="0">VIP 0</option>
+            <option value="1">VIP 1</option>
+            <option value="2">VIP 2</option>
+            <option value="3">VIP 3</option>
+            <option value="4">VIP 4</option>
+            <option value="5">VIP 5</option>
+          </select>
+        </div>
+
+        <button
+          onClick={() => onUpdate(user.id, parseFloat(balance), parseInt(vipLevel))}
+          className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 font-bold rounded-lg transition text-xs flex items-center gap-1 mt-3"
+        >
+          <Save className="w-3 h-3" /> Save
+        </button>
+      </div>
+    </div>
+  )
+                  }
+          
