@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Wallet, CheckSquare, ArrowUpRight, LogOut, User, Crown } from 'lucide-react'
+import { Wallet, CheckSquare, ArrowUpRight, LogOut, User, Crown, Share2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function Dashboard() {
@@ -77,21 +77,26 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* Action Buttons (4 grid items including Referral) */}
+        <div className="grid grid-cols-4 gap-2 md:gap-3">
           <Link href="/vip" className="p-3 bg-slate-900 border border-amber-500/30 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
             <Crown className="w-5 h-5 text-amber-400" />
-            <span className="font-bold text-xs text-amber-400">VIP Levels</span>
+            <span className="font-bold text-[11px] text-amber-400">VIP</span>
           </Link>
 
           <Link href="/tasks" className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
             <CheckSquare className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-xs text-slate-200">Earn</span>
+            <span className="font-bold text-[11px] text-slate-200">Tasks</span>
+          </Link>
+
+          <Link href="/referral" className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
+            <Share2 className="w-5 h-5 text-indigo-400" />
+            <span className="font-bold text-[11px] text-slate-200">Referral</span>
           </Link>
 
           <Link href="/withdraw" className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col items-center text-center justify-center space-y-1">
             <ArrowUpRight className="w-5 h-5 text-teal-400" />
-            <span className="font-bold text-xs text-slate-200">Withdraw</span>
+            <span className="font-bold text-[11px] text-slate-200">Withdraw</span>
           </Link>
         </div>
       </div>
