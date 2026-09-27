@@ -14,9 +14,10 @@ export default function AdminDashboard() {
   const [withdrawals, setWithdrawals] = useState([])
 
   const [taskTitle, setTaskTitle] = useState('')
+  const [taskDescription, setTaskDescription] = useState('') // Description added
   const [taskReward, setTaskReward] = useState('')
   const [taskLink, setTaskLink] = useState('')
-  const [taskVip, setTaskVip] = useState(0) // VIP level option added
+  const [taskVip, setTaskVip] = useState(0)
 
   // 1 USDT = 120 BDT
   const BDT_RATE = 120
@@ -68,14 +69,12 @@ export default function AdminDashboard() {
       const currentBalance = Number(userProfile?.balance || 0)
       const rawAmount = Number(dep.amount || 0)
       
-      // BDT to USDT Conversion
       const addedUsdt = dep.method && dep.method.toLowerCase().includes('usdt') 
         ? rawAmount 
         : (rawAmount / BDT_RATE)
         
       const newBalance = currentBalance + addedUsdt
 
-      // Update Balance in profiles table
       const { error: updateErr } = await supabase
         .from('profiles')
         .update({ balance: parseFloat(newBalance.toFixed(2)) })
@@ -83,7 +82,6 @@ export default function AdminDashboard() {
 
       if (updateErr) throw updateErr
 
-      // Update deposit status
       await supabase.from('deposits').update({ status: 'approved' }).eq('id', dep.id)
 
       alert(`Deposit Approved! Added $${addedUsdt.toFixed(2)} USDT. New Balance: $${newBalance.toFixed(2)}`)
@@ -129,10 +127,10 @@ export default function AdminDashboard() {
 
   const handleCreateTask = async (e) => {
     e.preventDefault()
-    // min_vip field table-e thakle oi onujayi save hobe
     await supabase.from('tasks').insert([
       { 
         title: taskTitle, 
+        description: taskDescription, // Description database-e pathano hocche
         reward: parseFloat(taskReward || 0), 
         link: taskLink || '#', 
         min_vip: parseInt(taskVip || 0), 
@@ -140,7 +138,7 @@ export default function AdminDashboard() {
       }
     ])
     alert('Task Created Successfully!')
-    setTaskTitle(''); setTaskReward(''); setTaskLink(''); setTaskVip(0)
+    setTaskTitle(''); setTaskDescription(''); setTaskReward(''); setTaskLink(''); setTaskVip(0)
     fetchData()
   }
 
@@ -223,7 +221,7 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* CREATE TASK SECTION (WITH VIP OPTION) */}
+      {/* CREATE TASK SECTION (WITH DESCRIPTION & VIP) */}
       <form onSubmit={handleCreateTask} className="bg-slate-900 p-4 rounded-xl space-y-3 text-xs">
         <h2 className="font-bold text-emerald-400 flex items-center gap-1"><Plus className="w-4 h-4" /> Create New Task</h2>
         
@@ -235,6 +233,17 @@ export default function AdminDashboard() {
             onChange={e => setTaskTitle(e.target.value)} 
             required 
             className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" 
+          />
+        </div>
+
+        <div>
+          <label className="text-[11px] text-slate-400 mb-1 block">Task Description / Instructions</label>
+          <textarea 
+            placeholder="Ex: Subscribe channel and take a screenshot of completion..." 
+            value={taskDescription} 
+            onChange={e => setTaskDescription(e.target.value)} 
+            rows={3}
+            className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white resize-none" 
           />
         </div>
 
@@ -252,7 +261,7 @@ export default function AdminDashboard() {
         </div>
 
         <div>
-          <label className="text-[11px] text-slate-400 mb-1 block">Target VIP Level (Required Level to Complete Task)</label>
+          <label className="text-[11px] text-slate-400 mb-1 block">Target VIP Level</label>
           <select 
             value={taskVip} 
             onChange={e => setTaskVip(e.target.value)} 
@@ -314,4 +323,4 @@ function UserCard({ user, onSave }) {
     </div>
   )
         }
-        
+                                                        
