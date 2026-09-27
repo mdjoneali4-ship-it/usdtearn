@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
   Wallet, CheckCircle2, Users, Crown, ArrowUpRight, 
-  ArrowDownLeft, LogOut, ShieldCheck, Zap, Sparkles, Award, ExternalLink 
+  ArrowDownLeft, LogOut, ShieldCheck, Zap, Sparkles, Award, ExternalLink, History 
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -244,7 +244,7 @@ export default function Dashboard() {
         </div>
 
         {/* QUICK NAVIGATION MENU */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Link 
             href="/tasks" 
             className="p-4 bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-2xl flex items-center justify-between transition group"
@@ -255,10 +255,26 @@ export default function Dashboard() {
               </div>
               <div>
                 <h4 className="font-bold text-xs text-slate-200">Task Center</h4>
-                <p className="text-[10px] text-slate-400">Browse & complete all micro-tasks</p>
+                <p className="text-[10px] text-slate-400">Browse micro-tasks</p>
               </div>
             </div>
             <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition" />
+          </Link>
+
+          <Link 
+            href="/history" 
+            className="p-4 bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl flex items-center justify-between transition group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl group-hover:scale-110 transition">
+                <History className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-slate-200">History</h4>
+                <p className="text-[10px] text-slate-400">Deposits, Cashout & Tasks</p>
+              </div>
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 transition" />
           </Link>
 
           <Link 
@@ -271,7 +287,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <h4 className="font-bold text-xs text-slate-200">Referral Hub</h4>
-                <p className="text-[10px] text-slate-400">Invite friends & earn bonus</p>
+                <p className="text-[10px] text-slate-400">Invite friends & earn</p>
               </div>
             </div>
             <ArrowUpRight className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition" />
@@ -289,5 +305,5 @@ export default function Dashboard() {
       </div>
     </div>
   )
-      }
-                  
+              }
+              
