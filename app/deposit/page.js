@@ -1,225 +1,200 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Send, Image as ImageIcon, Wallet, History, CheckCircle2, Clock } from 'lucide-react'
+import { ArrowLeft, Wallet, Copy, CheckCircle, Info, DollarSign } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function DepositPage() {
-  const [profile, setProfile] = useState(null)
-  const [amount, setAmount] = useState('')
-  const [method, setMethod] = useState('bKash')
-  const [trxId, setTrxId] = useState('')
-  const [proofFile, setProofFile] = useState(null)
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [deposits, setDeposits] = useState([])
+  const [method, setMethod] = useState('bkash') // 'bkash', 'nagad', 'rocket', 'usdt'
+  const [amount, setAmount] = useState('')
+  const [trxId, setTrxId] = useState('')
+  const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
-    async function loadData() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        setProfile(userProfile)
+  // Rate: 1 USDT = 120 BDT
+  const USDT_RATE = 120
 
-        // Fetch user's deposit history
-        const { data: userDeposits } = await supabase
-          .from('deposits')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
+  // Payment Details
+  const paymentDetails = {
+    bkash: { type: 'bdt', label: 'bKash Personal', value: '01700000000' },
+    nagad: { type: 'bdt', label: 'Nagad Personal', value: '01800000000' },
+    rocket: { type: 'bdt', label: 'Rocket Personal', value: '01900000000' },
+    usdt: { type: 'usdt', label: 'USDT (TRC20 Address)', value: 'TY1234567890abcdef1234567890' }
+  }
 
-        if (userDeposits) setDeposits(userDeposits)
-      }
-    }
-    loadData()
-  }, [])
+  const selectedPayment = paymentDetails[method]
 
-  const handleDepositSubmit = async (e) => {
+  // Calculate USDT when BDT is entered
+  const calculatedUsdt = selectedPayment.type === 'bdt' && amount 
+    ? (parseFloat(amount) / USDT_RATE).toFixed(2) 
+    : amount ? parseFloat(amount).toFixed(2) : '0.00'
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!profile) return
+
+    const numericAmount = parseFloat(amount)
+    if (!numericAmount || numericAmount <= 0) {
+      return alert('সঠিক পরিমাণ উল্লেখ করুন!')
+    }
+
+    if (selectedPayment.type === 'bdt' && numericAmount < 120) {
+      return alert('সর্বনিম্ন ডিপোজিট ১২০ টাকা ($1 USDT)')
+    }
+
+    if (selectedPayment.type === 'usdt' && numericAmount < 1) {
+      return alert('Minimum deposit is $1 USDT')
+    }
+
+    if (!trxId) return alert('Transaction ID / TxID প্রদান করুন')
+
     setLoading(true)
-
-    let proofUrl = ''
-
-    // Upload screenshot if provided
-    if (proofFile) {
-      const fileExt = proofFile.name.split('.').pop()
-      const fileName = `deposit_${profile.id}_${Math.random()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage
-        .from('deposit-proofs')
-        .upload(fileName, proofFile)
-
-      if (uploadError) {
-        alert('Error uploading screenshot: ' + uploadError.message)
-        setLoading(false)
-        return
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('অনুগ্রহ করে আগে লগইন করুন')
+        return router.push('/login')
       }
 
-      const { data: publicURLData } = supabase.storage
-        .from('deposit-proofs')
-        .getPublicUrl(fileName)
+      // Insert Deposit Record
+      const { error } = await supabase.from('deposits').insert([
+        {
+          user_id: user.id,
+          amount: numericAmount,
+          method: method.toUpperCase(),
+          trx_id: trxId,
+          status: 'pending'
+        }
+      ])
 
-      proofUrl = publicURLData.publicUrl
+      if (error) throw error
+
+      alert('ডিপোজিট রিকোয়েস্ট সফলভাবে জমা হয়েছে! এডমিন যাচাই করে ব্যালেন্স যোগ করে দেবে।')
+      router.push('/dashboard')
+    } catch (err) {
+      alert('Error: ' + err.message)
+    } finally {
+      setLoading(false)
     }
-
-    const { error } = await supabase.from('deposits').insert([
-      {
-        user_id: profile.id,
-        amount: parseFloat(amount),
-        method,
-        trx_id: trxId,
-        proof_url: proofUrl,
-        status: 'pending'
-      }
-    ])
-
-    if (error) {
-      alert('Deposit failed: ' + error.message)
-    } else {
-      alert('Deposit request submitted successfully! Please wait for approval.')
-      setAmount('')
-      setTrxId('')
-      setProofFile(null)
-      // Reload history
-      window.location.reload()
-    }
-    setLoading(false)
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 pb-20">
-      <div className="max-w-2xl mx-auto space-y-6">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="p-2 bg-slate-800 rounded-xl text-slate-300 hover:bg-slate-700 transition">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div>
-              <h1 className="text-lg font-bold text-slate-100">Deposit Funds</h1>
-              <p className="text-xs text-slate-400">Add balance to your account securely</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-emerald-400 text-xs font-bold">
-            <Wallet className="w-4 h-4" /> Balance: ${profile?.balance || 0}
-          </div>
-        </div>
-
-        {/* Payment Info Box */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-          <h2 className="text-sm font-bold text-slate-200">Payment Instructions</h2>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Please send money to our official merchant/personal account below and submit your Transaction ID & Screenshot here.
-          </p>
-          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5 text-xs">
-            <p className="text-slate-300"><span className="text-slate-500">bKash / Nagad (Personal):</span> <strong className="text-emerald-400">01700000000</strong></p>
-            <p className="text-slate-300"><span className="text-slate-500">USDT (TRC20):</span> <strong className="text-emerald-400">TQxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</strong></p>
-          </div>
-        </div>
-
-        {/* Deposit Form */}
-        <form onSubmit={handleDepositSubmit} className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
-          <h2 className="text-sm font-bold text-slate-200">Deposit Form</h2>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-300">Select Payment Method</label>
-            <select
-              value={method}
-              onChange={(e) => setMethod(e.target.value)}
-              className="w-full mt-1 p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none"
-            >
-              <option value="bKash">bKash</option>
-              <option value="Nagad">Nagad</option>
-              <option value="USDT">USDT (TRC20)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-300">Amount (USD / BDT)</label>
-            <input
-              type="number"
-              step="0.01"
-              required
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="Enter amount..."
-              className="w-full mt-1 p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-300">Transaction ID (TrxID)</label>
-            <input
-              type="text"
-              required
-              value={trxId}
-              onChange={(e) => setTrxId(e.target.value)}
-              placeholder="Enter transaction ID..."
-              className="w-full mt-1 p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <ImageIcon className="w-3.5 h-3.5 text-emerald-400" /> Payment Screenshot
-            </label>
-            <input
-              type="file"
-              accept="image/*"
-              required
-              onChange={(e) => setProofFile(e.target.files[0])}
-              className="w-full mt-1 p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-400 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-600 cursor-pointer"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 mt-2"
-          >
-            <Send className="w-4 h-4" /> {loading ? 'Submitting Request...' : 'Submit Deposit Request'}
-          </button>
-        </form>
-
-        {/* Deposit History */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-          <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-            <History className="w-4 h-4 text-emerald-400" /> Deposit History
-          </h2>
-
-          <div className="space-y-2">
-            {deposits.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-4">No deposit history found.</p>
-            ) : (
-              deposits.map((item) => (
-                <div key={item.id} className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs">
-                  <div className="space-y-0.5">
-                    <p className="font-bold text-slate-200">${item.amount} <span className="text-[10px] text-slate-400 font-normal">({item.method})</span></p>
-                    <p className="text-[10px] text-slate-500">TrxID: {item.trx_id}</p>
-                  </div>
-                  <div>
-                    {item.status === 'approved' ? (
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                        <CheckCircle2 className="w-3 h-3" /> Approved
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
-                        <Clock className="w-3 h-3" /> Pending
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
+    <div className="min-h-screen bg-slate-950 text-white p-4 max-w-md mx-auto space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
+        <Link href="/dashboard" className="p-2 bg-slate-800 rounded-lg text-slate-300">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <h1 className="font-bold text-lg flex items-center gap-2">
+          <Wallet className="text-emerald-400 w-5 h-5" /> Deposit Funds
+        </h1>
       </div>
+
+      {/* Info Card */}
+      {selectedPayment.type === 'bdt' ? (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 p-3.5 rounded-xl flex items-center gap-3 text-xs text-emerald-400">
+          <Info className="w-5 h-5 shrink-0" />
+          <p><span className="font-bold">BDT Rate:</span> $1.00 USDT = {USDT_RATE} BDT। টাকা পাঠালে অটোমেটিক ডলারে রূপান্তর হয়ে একাউন্টে জমা হবে।</p>
+        </div>
+      ) : (
+        <div className="bg-blue-500/10 border border-blue-500/30 p-3.5 rounded-xl flex items-center gap-3 text-xs text-blue-400">
+          <DollarSign className="w-5 h-5 shrink-0" />
+          <p><span className="font-bold">Crypto Deposit:</span> USDT (TRC20) নেটওয়ার্কে নির্দিষ্ট ঠিকানায় পাঠালে আপনার একাউন্টে সরাসরি USDT জমা হবে।</p>
+        </div>
+      )}
+
+      {/* Select Method */}
+      <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
+        <label className="text-xs font-semibold text-slate-400 block">পেমেন্ট মেথড সিলেক্ট করুন:</label>
+        <div className="grid grid-cols-4 gap-2">
+          {['bkash', 'nagad', 'rocket', 'usdt'].map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setMethod(m)
+                setAmount('')
+              }}
+              className={`py-2.5 px-2 rounded-lg text-xs font-bold uppercase transition-all border ${
+                method === m
+                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+                  : 'bg-slate-950 border-slate-800 text-slate-400'
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+
+        {/* Selected Payment Details */}
+        <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-1">
+          <p className="text-[11px] text-slate-400">{selectedPayment.label}:</p>
+          <div className="flex items-center justify-between gap-2 overflow-hidden">
+            <p className="font-mono font-bold text-emerald-400 text-xs truncate">{selectedPayment.value}</p>
+            <button
+              type="button"
+              onClick={() => copyToClipboard(selectedPayment.value)}
+              className="flex items-center gap-1 text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-300 shrink-0"
+            >
+              {copied ? <CheckCircle className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-4 text-xs">
+        <div>
+          <label className="block text-slate-400 mb-1 font-semibold">
+            {selectedPayment.type === 'bdt' ? 'টাকার পরিমাণ (BDT):' : 'পরিমাণ (USDT):'}
+          </label>
+          <input
+            type="number"
+            step="any"
+            placeholder={selectedPayment.type === 'bdt' ? 'e.g. 600' : 'e.g. 10'}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+            className="w-full bg-slate-950 p-3 rounded-lg border border-slate-800 text-white font-mono focus:border-emerald-500 outline-none"
+          />
+        </div>
+
+        {/* Conversion Calculation Display */}
+        <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 flex justify-between items-center">
+          <span className="text-slate-400">একাউন্টে জমা হবে:</span>
+          <span className="font-bold text-emerald-400 text-sm font-mono">${calculatedUsdt} USDT</span>
+        </div>
+
+        <div>
+          <label className="block text-slate-400 mb-1 font-semibold">
+            {selectedPayment.type === 'bdt' ? 'TrxID (বিকাশ/নগদ ট্রানজেকশন আইডি):' : 'TxID / Hash (Crypto Transaction Hash):'}
+          </label>
+          <input
+            type="text"
+            placeholder={selectedPayment.type === 'bdt' ? 'e.g. 9J87X6Y5Z' : 'e.g. 0x123...abc'}
+            value={trxId}
+            onChange={(e) => setTrxId(e.target.value)}
+            required
+            className="w-full bg-slate-950 p-3 rounded-lg border border-slate-800 text-white font-mono focus:border-emerald-500 outline-none"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-black py-3 rounded-xl font-bold transition-all disabled:opacity-50"
+        >
+          {loading ? 'জমা হচ্ছে...' : 'Submit Deposit'}
+        </button>
+      </form>
     </div>
   )
-                }
-                                          
+          }
