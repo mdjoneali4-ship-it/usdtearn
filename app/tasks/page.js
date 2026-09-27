@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, Lock, CheckCircle, Upload, X } from 'lucide-react'
-import { supabase } from '@/lib/supabase' // Apnar path onujayi thik rakhun
+import { supabase } from '../../lib/supabase'
 
 export default function UserTasksPage() {
   const router = useRouter()
@@ -177,9 +177,9 @@ export default function UserTasksPage() {
                         href={task.link}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition border border-slate-700"
+                        className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition border border-slate-700 text-center"
                       >
-                        <ExternalLink className="w-3.5 h-3.5 text-emerald-400" /> Open Link
+                        <ExternalLink className="w-3.5 h-3.5 text-emerald-400 inline-block" /> Open Link
                       </a>
                     )}
 
@@ -247,5 +247,4 @@ export default function UserTasksPage() {
       )}
     </div>
   )
-                }
-                
+}
