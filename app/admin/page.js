@@ -501,3 +501,8 @@ export default function AdminDashboard() {
     </div>
   )
 }
+
+function UserRow({ user, onUpdate }) {
+  const [balance, setBalance] = useState(user.balance || 0)
+  const [vipLevel, setVipLevel] = useState(user.vip_level || 0)
+
