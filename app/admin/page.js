@@ -17,8 +17,8 @@ export default function AdminDashboard() {
   const [taskReward, setTaskReward] = useState('')
   const [taskLink, setTaskLink] = useState('')
 
-  // 1 USDT = 120 BDT (Apnar dorkar moto change korte paren)
-  const BDT_RATE = 120 
+  // 1 USDT = 120 BDT
+  const BDT_RATE = 120
 
   useEffect(() => {
     fetchData()
@@ -67,9 +67,11 @@ export default function AdminDashboard() {
       const currentBalance = Number(userProfile?.balance || 0)
       const rawAmount = Number(dep.amount || 0)
       
-      // Jodi user BDT/Taka deposit kore thake, tobe BDT_RATE diye vag hoye USDT hobe.
-      // Ekhane 1 USDT = 120 BDT dhora hoyeche.
-      const addedUsdt = rawAmount > 50 ? (rawAmount / BDT_RATE) : rawAmount
+      // BDT to USDT Conversion
+      const addedUsdt = dep.method && dep.method.toLowerCase().includes('usdt') 
+        ? rawAmount 
+        : (rawAmount / BDT_RATE)
+        
       const newBalance = currentBalance + addedUsdt
 
       // Update Balance in profiles table
@@ -252,5 +254,5 @@ function UserCard({ user, onSave }) {
       </div>
     </div>
   )
-    }
-          
+        }
+                                          
