@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ShieldCheck, Plus, Save, ArrowDownLeft, ArrowUpRight, Crown } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, Plus, Save, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function AdminDashboard() {
@@ -14,7 +14,7 @@ export default function AdminDashboard() {
   const [withdrawals, setWithdrawals] = useState([])
 
   const [taskTitle, setTaskTitle] = useState('')
-  const [taskDescription, setTaskDescription] = useState('') // Description added
+  const [taskDescription, setTaskDescription] = useState('')
   const [taskReward, setTaskReward] = useState('')
   const [taskLink, setTaskLink] = useState('')
   const [taskVip, setTaskVip] = useState(0)
@@ -127,19 +127,26 @@ export default function AdminDashboard() {
 
   const handleCreateTask = async (e) => {
     e.preventDefault()
-    await supabase.from('tasks').insert([
+    
+    const { error } = await supabase.from('tasks').insert([
       { 
         title: taskTitle, 
-        description: taskDescription, // Description database-e pathano hocche
+        description: taskDescription, 
         reward: parseFloat(taskReward || 0), 
         link: taskLink || '#', 
         min_vip: parseInt(taskVip || 0), 
         status: 'approved' 
       }
     ])
-    alert('Task Created Successfully!')
-    setTaskTitle(''); setTaskDescription(''); setTaskReward(''); setTaskLink(''); setTaskVip(0)
-    fetchData()
+
+    if (error) {
+      alert('Failed to save task: ' + error.message)
+      console.error(error)
+    } else {
+      alert('Task Created Successfully!')
+      setTaskTitle(''); setTaskDescription(''); setTaskReward(''); setTaskLink(''); setTaskVip(0)
+      fetchData()
+    }
   }
 
   const handleUpdateUser = async (id, balance, vip_level) => {
@@ -207,7 +214,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* TASKS */}
+      {/* PENDING TASKS */}
       <div className="bg-slate-900 p-4 rounded-xl space-y-3">
         <h2 className="font-bold text-amber-400 text-sm">Pending Tasks ({pendingTasks.length})</h2>
         {pendingTasks.map(t => (
@@ -221,7 +228,7 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* CREATE TASK SECTION (WITH DESCRIPTION & VIP) */}
+      {/* CREATE TASK FORM */}
       <form onSubmit={handleCreateTask} className="bg-slate-900 p-4 rounded-xl space-y-3 text-xs">
         <h2 className="font-bold text-emerald-400 flex items-center gap-1"><Plus className="w-4 h-4" /> Create New Task</h2>
         
@@ -239,7 +246,7 @@ export default function AdminDashboard() {
         <div>
           <label className="text-[11px] text-slate-400 mb-1 block">Task Description / Instructions</label>
           <textarea 
-            placeholder="Ex: Subscribe channel and take a screenshot of completion..." 
+            placeholder="Ex: Subscribe channel and take a screenshot..." 
             value={taskDescription} 
             onChange={e => setTaskDescription(e.target.value)} 
             rows={3}
@@ -250,7 +257,7 @@ export default function AdminDashboard() {
         <div>
           <label className="text-[11px] text-slate-400 mb-1 block">Reward ($ USDT)</label>
           <input 
-            placeholder="Ex: 0.50" 
+            placeholder="Ex: 0.05" 
             type="number" 
             step="0.01" 
             value={taskReward} 
@@ -322,5 +329,4 @@ function UserCard({ user, onSave }) {
       </div>
     </div>
   )
-        }
-                                                        
+}
