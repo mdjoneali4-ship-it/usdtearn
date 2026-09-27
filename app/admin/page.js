@@ -37,11 +37,11 @@ export default function AdminDashboard() {
       const { data: t } = await supabase.from('tasks').select('*').eq('status', 'pending')
       if (t) setPendingTasks(t)
 
-      // Fetch Deposits directly
+      // Fetch Deposits
       const { data: d } = await supabase.from('deposits').select('*').eq('status', 'pending').order('created_at', { ascending: false })
       if (d) setDeposits(d)
 
-      // Fetch Withdrawals directly
+      // Fetch Withdrawals
       const { data: w } = await supabase.from('withdrawals').select('*').eq('status', 'pending').order('created_at', { ascending: false })
       if (w) setWithdrawals(w)
     } catch (e) {
@@ -53,17 +53,34 @@ export default function AdminDashboard() {
 
   const handleApproveDeposit = async (dep) => {
     try {
-      // Find user balance from users list
-      const targetUser = users.find(u => u.id === dep.user_id)
-      const currentBal = Number(targetUser?.balance || 0)
-      const newBal = currentBal + Number(dep.amount || 0)
+      // 1. Fetch current profile directly from Database
+      const { data: userProfile, error: userErr } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('id', dep.user_id)
+        .single()
 
-      await supabase.from('profiles').update({ balance: newBal }).eq('id', dep.user_id)
+      if (userErr) throw userErr
+
+      const currentBalance = Number(userProfile?.balance || 0)
+      const depositAmount = Number(dep.amount || 0)
+      const newBalance = currentBalance + depositAmount
+
+      // 2. Update Balance in profiles table
+      const { error: updateErr } = await supabase
+        .from('profiles')
+        .update({ balance: newBalance })
+        .eq('id', dep.user_id)
+
+      if (updateErr) throw updateErr
+
+      // 3. Update deposit status
       await supabase.from('deposits').update({ status: 'approved' }).eq('id', dep.id)
-      alert('Deposit Approved & Balance Added!')
+
+      alert(`Deposit Approved! Added $${depositAmount}. New Balance: $${newBalance}`)
       fetchData()
     } catch (err) {
-      alert('Error: ' + err.message)
+      alert('Error approving deposit: ' + err.message)
     }
   }
 
@@ -81,8 +98,8 @@ export default function AdminDashboard() {
 
   const handleRejectWithdrawal = async (w) => {
     try {
-      const targetUser = users.find(u => u.id === w.user_id)
-      const currentBal = Number(targetUser?.balance || 0)
+      const { data: userProfile } = await supabase.from('profiles').select('balance').eq('id', w.user_id).single()
+      const currentBal = Number(userProfile?.balance || 0)
       const refundedBal = currentBal + Number(w.amount || 0)
 
       await supabase.from('profiles').update({ balance: refundedBal }).eq('id', w.user_id)
@@ -109,7 +126,7 @@ export default function AdminDashboard() {
   }
 
   const handleUpdateUser = async (id, balance, vip_level) => {
-    await supabase.from('profiles').update({ balance, vip_level }).eq('id', id)
+    await supabase.from('profiles').update({ balance: parseFloat(balance), vip_level: parseInt(vip_level) }).eq('id', id)
     alert('User Updated!')
     fetchData()
   }
@@ -224,8 +241,9 @@ function UserCard({ user, onSave }) {
           <option value="1">VIP 1</option>
           <option value="2">VIP 2</option>
         </select>
-        <button onClick={() => onSave(user.id, parseFloat(b), parseInt(v))} className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-bold"><Save className="w-3 h-3" /></button>
+        <button onClick={() => onSave(user.id, b, v)} className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-bold"><Save className="w-3 h-3" /></button>
       </div>
     </div>
   )
-}
+          }
+        
