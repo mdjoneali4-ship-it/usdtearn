@@ -39,7 +39,8 @@ export default function TasksPage() {
         }
       }
 
-      const { data: allTasks } = await supabase
+      // Fetch Tasks
+      const { data: allTasks, error } = await supabase
         .from('tasks')
         .select('*')
         .eq('status', 'approved')
@@ -47,6 +48,9 @@ export default function TasksPage() {
 
       if (allTasks) {
         setTasks(allTasks)
+      }
+      if (error) {
+        console.error('Error fetching tasks:', error.message)
       }
 
       setLoading(false)
@@ -62,7 +66,6 @@ export default function TasksPage() {
 
     let finalProofContent = proofText
 
-    // যদি ইউজার কোনো স্ক্রিনশট বা ছবি সিলেক্ট করে থাকে
     if (proofFile) {
       const fileExt = proofFile.name.split('.').pop()
       const fileName = `${profile.id}_${Math.random()}.${fileExt}`
@@ -78,7 +81,6 @@ export default function TasksPage() {
         return
       }
 
-      // ছবির পাবলিক লিংক বের করা
       const { data: publicURLData } = supabase.storage
         .from('task-proofs')
         .getPublicUrl(filePath)
@@ -145,7 +147,9 @@ export default function TasksPage() {
           ) : (
             tasks.map((task) => {
               const isCompleted = completedTaskIds.includes(task.id)
-              const isLocked = (profile?.vip_level || 0) < (task.min_vip_level || 0)
+              // min_vip_level এর বদলে min_vip দিয়ে চেক করা হয়েছে
+              const requiredVip = task.min_vip ?? task.min_vip_level ?? 0
+              const isLocked = (profile?.vip_level || 0) < requiredVip
 
               return (
                 <div
@@ -156,9 +160,9 @@ export default function TasksPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <h2 className="font-bold text-sm text-slate-100">{task.title}</h2>
-                        {task.min_vip_level > 0 && (
+                        {requiredVip > 0 && (
                           <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-bold">
-                            VIP {task.min_vip_level}+
+                            VIP {requiredVip}+
                           </span>
                         )}
                       </div>
@@ -177,7 +181,7 @@ export default function TasksPage() {
                         </span>
                       ) : isLocked ? (
                         <span className="flex items-center gap-1 text-xs font-bold text-slate-500 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl">
-                          <Lock className="w-4 h-4" /> VIP {task.min_vip_level} Required
+                          <Lock className="w-4 h-4" /> VIP {requiredVip} Required
                         </span>
                       ) : (
                         <div className="flex items-center gap-2">
@@ -263,5 +267,4 @@ export default function TasksPage() {
       </div>
     </div>
   )
-                        }
-                        
+}
