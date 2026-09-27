@@ -14,6 +14,7 @@ export default function AdminDashboard() {
   const [withdrawals, setWithdrawals] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   
+  // Task Creation States
   const [taskTitle, setTaskTitle] = useState('')
   const [taskDescription, setTaskDescription] = useState('')
   const [taskReward, setTaskReward] = useState('')
@@ -34,6 +35,7 @@ export default function AdminDashboard() {
         return
       }
 
+      // Check Admin Role
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -46,21 +48,25 @@ export default function AdminDashboard() {
         return
       }
 
-      // Fetch Users safely
+      // 1. Fetch Users safely
       const { data: allUsers } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false })
       if (allUsers) setUsers(allUsers)
 
-      // Fetch Tasks safely
-      const { data: tasksData } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('status', 'pending')
-      if (tasksData) setPendingTasks(tasksData)
+      // 2. Fetch Pending Tasks safely
+      try {
+        const { data: tasksData } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('status', 'pending')
+        if (tasksData) setPendingTasks(tasksData)
+      } catch (e) {
+        console.warn('Tasks query error', e)
+      }
 
-      // Fetch Deposits safely
+      // 3. Fetch Deposits safely (Crash safe)
       try {
         const { data: depositsData } = await supabase
           .from('deposits')
@@ -69,10 +75,10 @@ export default function AdminDashboard() {
           .order('created_at', { ascending: false })
         if (depositsData) setDeposits(depositsData)
       } catch (e) {
-        console.warn('Deposits table not ready yet')
+        console.warn('Deposits table error', e)
       }
 
-      // Fetch Withdrawals safely
+      // 4. Fetch Withdrawals safely (Crash safe)
       try {
         const { data: withdrawalsData } = await supabase
           .from('withdrawals')
@@ -81,7 +87,7 @@ export default function AdminDashboard() {
           .order('created_at', { ascending: false })
         if (withdrawalsData) setWithdrawals(withdrawalsData)
       } catch (e) {
-        console.warn('Withdrawals table not ready yet')
+        console.warn('Withdrawals table error', e)
       }
 
     } catch (err) {
@@ -91,12 +97,13 @@ export default function AdminDashboard() {
     }
   }
 
-  // --- DEPOSIT ACCEPT LOGIC ---
+  // --- DEPOSIT APPROVE / REJECT ---
   const handleApproveDeposit = async (deposit) => {
     try {
       const currentBalance = Number(deposit.profiles?.balance || 0)
       const newBalance = currentBalance + Number(deposit.amount || 0)
 
+      // 1. Update Balance
       const { error: balanceError } = await supabase
         .from('profiles')
         .update({ balance: newBalance })
@@ -104,6 +111,7 @@ export default function AdminDashboard() {
 
       if (balanceError) throw balanceError
 
+      // 2. Update Deposit status
       const { error: depositError } = await supabase
         .from('deposits')
         .update({ status: 'approved' })
@@ -111,7 +119,7 @@ export default function AdminDashboard() {
 
       if (depositError) throw depositError
 
-      alert(`Deposit of $${deposit.amount} approved successfully!`)
+      alert(`Deposit of $${deposit.amount} Approved! Balance Updated.`)
       setDeposits(deposits.filter(d => d.id !== deposit.id))
       setUsers(users.map(u => u.id === deposit.user_id ? { ...u, balance: newBalance } : u))
     } catch (err) {
@@ -126,14 +134,14 @@ export default function AdminDashboard() {
       .eq('id', depositId)
 
     if (error) {
-      alert('Error rejecting deposit: ' + error.message)
+      alert('Error: ' + error.message)
     } else {
       alert('Deposit rejected.')
       setDeposits(deposits.filter(d => d.id !== depositId))
     }
   }
 
-  // --- WITHDRAWAL APPROVE LOGIC ---
+  // --- WITHDRAWAL APPROVE / REJECT ---
   const handleApproveWithdrawal = async (withdrawalId) => {
     const { error } = await supabase
       .from('withdrawals')
@@ -141,9 +149,9 @@ export default function AdminDashboard() {
       .eq('id', withdrawalId)
 
     if (error) {
-      alert('Error approving withdrawal: ' + error.message)
+      alert('Error: ' + error.message)
     } else {
-      alert('Withdrawal request marked as completed!')
+      alert('Withdrawal marked as Paid!')
       setWithdrawals(withdrawals.filter(w => w.id !== withdrawalId))
     }
   }
@@ -153,6 +161,7 @@ export default function AdminDashboard() {
       const currentBalance = Number(withdrawal.profiles?.balance || 0)
       const refundedBalance = currentBalance + Number(withdrawal.amount || 0)
 
+      // Refund balance back to user
       await supabase
         .from('profiles')
         .update({ balance: refundedBalance })
@@ -163,27 +172,30 @@ export default function AdminDashboard() {
         .update({ status: 'rejected' })
         .eq('id', withdrawal.id)
 
-      alert('Withdrawal rejected and balance refunded.')
+      alert('Withdrawal rejected & amount refunded to user balance!')
       setWithdrawals(withdrawals.filter(w => w.id !== withdrawal.id))
+      setUsers(users.map(u => u.id === withdrawal.user_id ? { ...u, balance: refundedBalance } : u))
     } catch (err) {
       alert('Error: ' + err.message)
     }
   }
 
-  const handleUpdateUser = async (userId, newBalance, newVip) => {
+  // --- TASK APPROVE / REJECT ---
+  const handleTaskStatus = async (taskId, newStatus) => {
     const { error } = await supabase
-      .from('profiles')
-      .update({ balance: newBalance, vip_level: newVip })
-      .eq('id', userId)
+      .from('tasks')
+      .update({ status: newStatus })
+      .eq('id', taskId)
 
     if (error) {
-      alert('Error updating user: ' + error.message)
+      alert('Error updating task: ' + error.message)
     } else {
-      alert('User updated successfully!')
-      setUsers(users.map(u => u.id === userId ? { ...u, balance: newBalance, vip_level: newVip } : u))
+      alert(`Task status updated to ${newStatus}!`)
+      setPendingTasks(pendingTasks.filter(t => t.id !== taskId))
     }
   }
 
+  // --- CREATE NEW TASK ---
   const handleCreateTask = async (e) => {
     e.preventDefault()
     setAddingTask(true)
@@ -203,7 +215,7 @@ export default function AdminDashboard() {
     if (error) {
       alert('Error creating task: ' + error.message)
     } else {
-      alert('New task added successfully!')
+      alert('New Task published successfully!')
       setTaskTitle('')
       setTaskDescription('')
       setTaskReward('')
@@ -212,17 +224,18 @@ export default function AdminDashboard() {
     setAddingTask(false)
   }
 
-  const handleTaskStatus = async (taskId, newStatus) => {
+  // --- EDIT USER DIRECTLY ---
+  const handleUpdateUser = async (userId, newBalance, newVip) => {
     const { error } = await supabase
-      .from('tasks')
-      .update({ status: newStatus })
-      .eq('id', taskId)
+      .from('profiles')
+      .update({ balance: newBalance, vip_level: newVip })
+      .eq('id', userId)
 
     if (error) {
-      alert('Error updating task: ' + error.message)
+      alert('Error updating user: ' + error.message)
     } else {
-      alert('Task status updated!')
-      setPendingTasks(pendingTasks.filter(t => t.id !== taskId))
+      alert('User details updated successfully!')
+      setUsers(users.map(u => u.id === userId ? { ...u, balance: newBalance, vip_level: newVip } : u))
     }
   }
 
@@ -243,6 +256,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 pb-20">
       <div className="max-w-5xl mx-auto space-y-6">
         
+        {/* HEADER */}
         <div className="flex justify-between items-center bg-slate-900 border border-slate-800 p-4 rounded-2xl">
           <div className="flex items-center gap-3">
             <Link href="/dashboard" className="p-2 bg-slate-800 rounded-xl text-slate-300">
@@ -250,21 +264,21 @@ export default function AdminDashboard() {
             </Link>
             <div>
               <h1 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" /> Admin Control Panel
+                <ShieldCheck className="w-5 h-5 text-emerald-400" /> Admin Master Control
               </h1>
-              <p className="text-xs text-slate-400">Manage users, deposits, and withdrawals</p>
+              <p className="text-xs text-slate-400">Manage tasks, deposits, withdrawals & users</p>
             </div>
           </div>
         </div>
 
-        {/* PENDING DEPOSITS */}
+        {/* 1. DEPOSIT REQUESTS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-            <ArrowDownLeft className="w-4 h-4" /> Deposit Requests ({deposits.length})
+            <ArrowDownLeft className="w-4 h-4" /> Pending Deposits ({deposits.length})
           </h2>
 
           {deposits.length === 0 ? (
-            <p className="text-xs text-slate-500">No pending deposit requests.</p>
+            <p className="text-xs text-slate-500">No pending deposits.</p>
           ) : (
             <div className="space-y-3">
               {deposits.map((d) => (
@@ -273,11 +287,6 @@ export default function AdminDashboard() {
                     <p className="font-bold text-slate-200">{d.profiles?.full_name || 'User'} ({d.profiles?.email || 'N/A'})</p>
                     <p className="text-emerald-400 font-bold mt-0.5">Amount: ${d.amount} USDT</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">Trx ID: <span className="text-slate-200 font-mono">{d.trx_id}</span> | Method: {d.method}</p>
-                    {d.proof_url && (
-                      <a href={d.proof_url} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 underline block mt-0.5">
-                        View Payment Proof
-                      </a>
-                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -285,7 +294,7 @@ export default function AdminDashboard() {
                       onClick={() => handleApproveDeposit(d)}
                       className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-bold flex items-center gap-1 transition"
                     >
-                      <CheckCircle className="w-3.5 h-3.5" /> Accept Deposit
+                      <CheckCircle className="w-3.5 h-3.5" /> Approve & Add Balance
                     </button>
                     <button
                       onClick={() => handleRejectDeposit(d.id)}
@@ -300,14 +309,14 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* PENDING WITHDRAWALS */}
+        {/* 2. WITHDRAWAL REQUESTS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-rose-400 flex items-center gap-2">
-            <ArrowUpRight className="w-4 h-4" /> Withdrawal Requests ({withdrawals.length})
+            <ArrowUpRight className="w-4 h-4" /> Pending Withdrawals ({withdrawals.length})
           </h2>
 
           {withdrawals.length === 0 ? (
-            <p className="text-xs text-slate-500">No pending withdrawal requests.</p>
+            <p className="text-xs text-slate-500">No pending withdrawals.</p>
           ) : (
             <div className="space-y-3">
               {withdrawals.map((w) => (
@@ -338,14 +347,14 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* PENDING TASKS */}
+        {/* 3. PENDING USER TASKS */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Pending User Tasks ({pendingTasks.length})
+            <Clock className="w-4 h-4" /> Pending Task Submissions ({pendingTasks.length})
           </h2>
 
           {pendingTasks.length === 0 ? (
-            <p className="text-xs text-slate-500">No pending task requests right now.</p>
+            <p className="text-xs text-slate-500">No pending task submissions.</p>
           ) : (
             <div className="space-y-3">
               {pendingTasks.map((t) => (
@@ -354,9 +363,6 @@ export default function AdminDashboard() {
                     <h3 className="font-bold text-slate-200">{t.title}</h3>
                     {t.description && <p className="text-[11px] text-slate-400 mt-0.5">{t.description}</p>}
                     <p className="text-[10px] text-emerald-400 font-semibold mt-1">Reward: ${t.reward}</p>
-                    <a href={t.link} target="_blank" rel="noreferrer" className="text-[10px] text-indigo-400 underline truncate block max-w-xs mt-0.5">
-                      {t.link}
-                    </a>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -379,10 +385,10 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* ADD TASK */}
+        {/* 4. ADD NEW TASK */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <h2 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-            <Plus className="w-4 h-4" /> Add Admin Task
+            <Plus className="w-4 h-4" /> Add New Task
           </h2>
 
           <form onSubmit={handleCreateTask} className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
@@ -393,7 +399,7 @@ export default function AdminDashboard() {
                 required
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
-                placeholder="e.g. Subscribe YouTube Channel"
+                placeholder="e.g. Subscribe Channel"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
               />
             </div>
@@ -414,10 +420,10 @@ export default function AdminDashboard() {
             <div className="md:col-span-2">
               <label className="text-slate-400 font-semibold">Task Description</label>
               <textarea
-                rows="3"
+                rows="2"
                 value={taskDescription}
                 onChange={(e) => setTaskDescription(e.target.value)}
-                placeholder="Explain instructions..."
+                placeholder="Instructions..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
               />
             </div>
@@ -429,7 +435,7 @@ export default function AdminDashboard() {
                 onChange={(e) => setTaskType(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
               >
-                <option value="public">Public (All Users / Free)</option>
+                <option value="public">Public (Free)</option>
                 <option value="vip">VIP Exclusive</option>
               </select>
             </div>
@@ -441,12 +447,10 @@ export default function AdminDashboard() {
                 onChange={(e) => setMinVip(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-slate-200 focus:outline-none"
               >
-                <option value="0">VIP 0 (Free)</option>
-                <option value="1">VIP 1 ($5)</option>
-                <option value="2">VIP 2 ($10)</option>
-                <option value="3">VIP 3 ($25)</option>
-                <option value="4">VIP 4 ($50)</option>
-                <option value="5">VIP 5 ($100)</option>
+                <option value="0">VIP 0</option>
+                <option value="1">VIP 1</option>
+                <option value="2">VIP 2</option>
+                <option value="3">VIP 3</option>
               </select>
             </div>
 
@@ -471,7 +475,7 @@ export default function AdminDashboard() {
           </form>
         </div>
 
-        {/* USER MANAGEMENT */}
+        {/* 5. USER MANAGEMENT */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <div className="flex justify-between items-center flex-wrap gap-2">
             <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -506,3 +510,5 @@ function UserRow({ user, onUpdate }) {
   const [balance, setBalance] = useState(user.balance || 0)
   const [vipLevel, setVipLevel] = useState(user.vip_level || 0)
 
+  return (
+    <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex flex-wrap justify-between items-cen
