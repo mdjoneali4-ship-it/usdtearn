@@ -17,6 +17,9 @@ export default function AdminDashboard() {
   const [taskReward, setTaskReward] = useState('')
   const [taskLink, setTaskLink] = useState('')
 
+  // 1 USDT = 120 BDT (Apnar dorkar moto change korte paren)
+  const BDT_RATE = 120 
+
   useEffect(() => {
     fetchData()
   }, [])
@@ -53,7 +56,6 @@ export default function AdminDashboard() {
 
   const handleApproveDeposit = async (dep) => {
     try {
-      // 1. Fetch current profile directly from Database
       const { data: userProfile, error: userErr } = await supabase
         .from('profiles')
         .select('balance')
@@ -63,21 +65,25 @@ export default function AdminDashboard() {
       if (userErr) throw userErr
 
       const currentBalance = Number(userProfile?.balance || 0)
-      const depositAmount = Number(dep.amount || 0)
-      const newBalance = currentBalance + depositAmount
+      const rawAmount = Number(dep.amount || 0)
+      
+      // Jodi user BDT/Taka deposit kore thake, tobe BDT_RATE diye vag hoye USDT hobe.
+      // Ekhane 1 USDT = 120 BDT dhora hoyeche.
+      const addedUsdt = rawAmount > 50 ? (rawAmount / BDT_RATE) : rawAmount
+      const newBalance = currentBalance + addedUsdt
 
-      // 2. Update Balance in profiles table
+      // Update Balance in profiles table
       const { error: updateErr } = await supabase
         .from('profiles')
-        .update({ balance: newBalance })
+        .update({ balance: parseFloat(newBalance.toFixed(2)) })
         .eq('id', dep.user_id)
 
       if (updateErr) throw updateErr
 
-      // 3. Update deposit status
+      // Update deposit status
       await supabase.from('deposits').update({ status: 'approved' }).eq('id', dep.id)
 
-      alert(`Deposit Approved! Added $${depositAmount}. New Balance: $${newBalance}`)
+      alert(`Deposit Approved! Added $${addedUsdt.toFixed(2)} USDT. New Balance: $${newBalance.toFixed(2)}`)
       fetchData()
     } catch (err) {
       alert('Error approving deposit: ' + err.message)
@@ -100,9 +106,10 @@ export default function AdminDashboard() {
     try {
       const { data: userProfile } = await supabase.from('profiles').select('balance').eq('id', w.user_id).single()
       const currentBal = Number(userProfile?.balance || 0)
-      const refundedBal = currentBal + Number(w.amount || 0)
+      const refundUsdt = Number(w.amount || 0)
+      const refundedBal = currentBal + refundUsdt
 
-      await supabase.from('profiles').update({ balance: refundedBal }).eq('id', w.user_id)
+      await supabase.from('profiles').update({ balance: parseFloat(refundedBal.toFixed(2)) }).eq('id', w.user_id)
       await supabase.from('withdrawals').update({ status: 'rejected' }).eq('id', w.id)
       alert('Withdrawal Rejected & Refunded!')
       fetchData()
@@ -152,8 +159,8 @@ export default function AdminDashboard() {
               <div key={d.id} className="p-3 bg-slate-950 rounded-lg flex flex-wrap justify-between items-center text-xs gap-2">
                 <div>
                   <p className="font-bold text-slate-200">{userObj?.full_name || 'User'} ({userObj?.email || d.user_id})</p>
-                  <p className="text-emerald-400 font-bold">${d.amount} USDT</p>
-                  <p className="text-slate-400 text-[11px]">Trx: {d.trx_id} | {d.method}</p>
+                  <p className="text-emerald-400 font-bold">Amount: {d.amount} ({d.method || 'BDT'})</p>
+                  <p className="text-slate-400 text-[11px]">Trx: {d.trx_id}</p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => handleApproveDeposit(d)} className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded font-bold">Approve</button>
@@ -235,7 +242,7 @@ function UserCard({ user, onSave }) {
         <p className="text-slate-500 text-[10px]">{user.email}</p>
       </div>
       <div className="flex items-center gap-2">
-        <input type="number" step="0.1" value={b} onChange={e => setB(e.target.value)} className="w-16 bg-slate-900 p-1 rounded border border-slate-800 text-white" />
+        <input type="number" step="0.01" value={b} onChange={e => setB(e.target.value)} className="w-16 bg-slate-900 p-1 rounded border border-slate-800 text-white" />
         <select value={v} onChange={e => setV(e.target.value)} className="bg-slate-900 p-1 rounded border border-slate-800 text-amber-400 font-bold">
           <option value="0">VIP 0</option>
           <option value="1">VIP 1</option>
@@ -245,5 +252,5 @@ function UserCard({ user, onSave }) {
       </div>
     </div>
   )
-          }
-        
+    }
+          
