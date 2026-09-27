@@ -29,16 +29,20 @@ export default function AdminDashboard() {
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
       if (!profile?.is_admin) return router.push('/dashboard')
 
+      // Fetch Users
       const { data: u } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
       if (u) setUsers(u)
 
+      // Fetch Pending Tasks
       const { data: t } = await supabase.from('tasks').select('*').eq('status', 'pending')
       if (t) setPendingTasks(t)
 
-      const { data: d } = await supabase.from('deposits').select('*, profiles(full_name, email, balance)').eq('status', 'pending')
+      // Fetch Deposits directly
+      const { data: d } = await supabase.from('deposits').select('*').eq('status', 'pending').order('created_at', { ascending: false })
       if (d) setDeposits(d)
 
-      const { data: w } = await supabase.from('withdrawals').select('*, profiles(full_name, email, balance)').eq('status', 'pending')
+      // Fetch Withdrawals directly
+      const { data: w } = await supabase.from('withdrawals').select('*').eq('status', 'pending').order('created_at', { ascending: false })
       if (w) setWithdrawals(w)
     } catch (e) {
       console.error(e)
@@ -48,11 +52,19 @@ export default function AdminDashboard() {
   }
 
   const handleApproveDeposit = async (dep) => {
-    const newBal = Number(dep.profiles?.balance || 0) + Number(dep.amount || 0)
-    await supabase.from('profiles').update({ balance: newBal }).eq('id', dep.user_id)
-    await supabase.from('deposits').update({ status: 'approved' }).eq('id', dep.id)
-    alert('Deposit Approved!')
-    fetchData()
+    try {
+      // Find user balance from users list
+      const targetUser = users.find(u => u.id === dep.user_id)
+      const currentBal = Number(targetUser?.balance || 0)
+      const newBal = currentBal + Number(dep.amount || 0)
+
+      await supabase.from('profiles').update({ balance: newBal }).eq('id', dep.user_id)
+      await supabase.from('deposits').update({ status: 'approved' }).eq('id', dep.id)
+      alert('Deposit Approved & Balance Added!')
+      fetchData()
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
   }
 
   const handleRejectDeposit = async (id) => {
@@ -63,16 +75,23 @@ export default function AdminDashboard() {
 
   const handleApproveWithdrawal = async (id) => {
     await supabase.from('withdrawals').update({ status: 'approved' }).eq('id', id)
-    alert('Withdrawal Paid!')
+    alert('Withdrawal Marked Paid!')
     fetchData()
   }
 
   const handleRejectWithdrawal = async (w) => {
-    const newBal = Number(w.profiles?.balance || 0) + Number(w.amount || 0)
-    await supabase.from('profiles').update({ balance: newBal }).eq('id', w.user_id)
-    await supabase.from('withdrawals').update({ status: 'rejected' }).eq('id', w.id)
-    alert('Withdrawal Rejected & Refunded!')
-    fetchData()
+    try {
+      const targetUser = users.find(u => u.id === w.user_id)
+      const currentBal = Number(targetUser?.balance || 0)
+      const refundedBal = currentBal + Number(w.amount || 0)
+
+      await supabase.from('profiles').update({ balance: refundedBal }).eq('id', w.user_id)
+      await supabase.from('withdrawals').update({ status: 'rejected' }).eq('id', w.id)
+      alert('Withdrawal Rejected & Refunded!')
+      fetchData()
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
   }
 
   const handleTaskStatus = async (id, status) => {
@@ -95,7 +114,7 @@ export default function AdminDashboard() {
     fetchData()
   }
 
-  if (loading) return <div className="min-h-screen bg-slate-950 text-white p-4">Loading Admin...</div>
+  if (loading) return <div className="min-h-screen bg-slate-950 text-white p-4 flex items-center justify-center">Loading Admin...</div>
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 space-y-6 max-w-4xl mx-auto">
@@ -104,38 +123,57 @@ export default function AdminDashboard() {
         <h1 className="font-bold flex items-center gap-2"><ShieldCheck className="text-emerald-400" /> Admin Control</h1>
       </div>
 
+      {/* DEPOSITS */}
       <div className="bg-slate-900 p-4 rounded-xl space-y-3">
         <h2 className="font-bold text-emerald-400 flex items-center gap-1 text-sm"><ArrowDownLeft className="w-4 h-4" /> Deposits ({deposits.length})</h2>
-        {deposits.map(d => (
-          <div key={d.id} className="p-3 bg-slate-950 rounded-lg flex flex-wrap justify-between items-center text-xs gap-2">
-            <div>
-              <p className="font-bold">{d.profiles?.full_name || 'User'} (${d.amount})</p>
-              <p className="text-slate-400">Trx: {d.trx_id}</p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => handleApproveDeposit(d)} className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded font-bold">Approve</button>
-              <button onClick={() => handleRejectDeposit(d.id)} className="bg-rose-500/20 text-rose-400 px-3 py-1 rounded font-bold">Reject</button>
-            </div>
-          </div>
-        ))}
+        {deposits.length === 0 ? (
+          <p className="text-xs text-slate-500">No pending deposits</p>
+        ) : (
+          deposits.map(d => {
+            const userObj = users.find(u => u.id === d.user_id)
+            return (
+              <div key={d.id} className="p-3 bg-slate-950 rounded-lg flex flex-wrap justify-between items-center text-xs gap-2">
+                <div>
+                  <p className="font-bold text-slate-200">{userObj?.full_name || 'User'} ({userObj?.email || d.user_id})</p>
+                  <p className="text-emerald-400 font-bold">${d.amount} USDT</p>
+                  <p className="text-slate-400 text-[11px]">Trx: {d.trx_id} | {d.method}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleApproveDeposit(d)} className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded font-bold">Approve</button>
+                  <button onClick={() => handleRejectDeposit(d.id)} className="bg-rose-500/20 text-rose-400 px-3 py-1 rounded font-bold">Reject</button>
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
+      {/* WITHDRAWALS */}
       <div className="bg-slate-900 p-4 rounded-xl space-y-3">
         <h2 className="font-bold text-rose-400 flex items-center gap-1 text-sm"><ArrowUpRight className="w-4 h-4" /> Withdrawals ({withdrawals.length})</h2>
-        {withdrawals.map(w => (
-          <div key={w.id} className="p-3 bg-slate-950 rounded-lg flex flex-wrap justify-between items-center text-xs gap-2">
-            <div>
-              <p className="font-bold">{w.profiles?.full_name || 'User'} (${w.amount})</p>
-              <p className="text-slate-400">Acc: {w.account_number}</p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => handleApproveWithdrawal(w.id)} className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded font-bold">Paid</button>
-              <button onClick={() => handleRejectWithdrawal(w)} className="bg-rose-500/20 text-rose-400 px-3 py-1 rounded font-bold">Refund</button>
-            </div>
-          </div>
-        ))}
+        {withdrawals.length === 0 ? (
+          <p className="text-xs text-slate-500">No pending withdrawals</p>
+        ) : (
+          withdrawals.map(w => {
+            const userObj = users.find(u => u.id === w.user_id)
+            return (
+              <div key={w.id} className="p-3 bg-slate-950 rounded-lg flex flex-wrap justify-between items-center text-xs gap-2">
+                <div>
+                  <p className="font-bold text-slate-200">{userObj?.full_name || 'User'} ({userObj?.email || w.user_id})</p>
+                  <p className="text-rose-400 font-bold">${w.amount} USDT</p>
+                  <p className="text-slate-400 text-[11px]">Acc: {w.account_number} ({w.method})</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleApproveWithdrawal(w.id)} className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded font-bold">Paid</button>
+                  <button onClick={() => handleRejectWithdrawal(w)} className="bg-rose-500/20 text-rose-400 px-3 py-1 rounded font-bold">Refund</button>
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
+      {/* TASKS */}
       <div className="bg-slate-900 p-4 rounded-xl space-y-3">
         <h2 className="font-bold text-amber-400 text-sm">Pending Tasks ({pendingTasks.length})</h2>
         {pendingTasks.map(t => (
@@ -149,14 +187,16 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      {/* CREATE TASK */}
       <form onSubmit={handleCreateTask} className="bg-slate-900 p-4 rounded-xl space-y-3 text-xs">
         <h2 className="font-bold text-emerald-400 flex items-center gap-1"><Plus className="w-4 h-4" /> Create Task</h2>
-        <input placeholder="Title" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} required className="w-full bg-slate-950 p-2 rounded border border-slate-800" />
-        <input placeholder="Reward ($)" type="number" step="0.01" value={taskReward} onChange={e => setTaskReward(e.target.value)} required className="w-full bg-slate-950 p-2 rounded border border-slate-800" />
-        <input placeholder="Link" value={taskLink} onChange={e => setTaskLink(e.target.value)} className="w-full bg-slate-950 p-2 rounded border border-slate-800" />
+        <input placeholder="Title" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} required className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" />
+        <input placeholder="Reward ($)" type="number" step="0.01" value={taskReward} onChange={e => setTaskReward(e.target.value)} required className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" />
+        <input placeholder="Link" value={taskLink} onChange={e => setTaskLink(e.target.value)} className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" />
         <button type="submit" className="w-full bg-emerald-500 text-black py-2 rounded font-bold">Publish</button>
       </form>
 
+      {/* USER MANAGEMENT */}
       <div className="bg-slate-900 p-4 rounded-xl space-y-3 text-xs">
         <h2 className="font-bold">Users ({users.length})</h2>
         {users.map(u => (
@@ -174,12 +214,12 @@ function UserCard({ user, onSave }) {
   return (
     <div className="p-3 bg-slate-950 rounded-lg flex flex-wrap justify-between items-center gap-2">
       <div>
-        <p className="font-bold">{user.full_name || 'User'}</p>
+        <p className="font-bold text-slate-200">{user.full_name || 'User'}</p>
         <p className="text-slate-500 text-[10px]">{user.email}</p>
       </div>
       <div className="flex items-center gap-2">
-        <input type="number" step="0.1" value={b} onChange={e => setB(e.target.value)} className="w-16 bg-slate-900 p-1 rounded border border-slate-800" />
-        <select value={v} onChange={e => setV(e.target.value)} className="bg-slate-900 p-1 rounded border border-slate-800 text-amber-400">
+        <input type="number" step="0.1" value={b} onChange={e => setB(e.target.value)} className="w-16 bg-slate-900 p-1 rounded border border-slate-800 text-white" />
+        <select value={v} onChange={e => setV(e.target.value)} className="bg-slate-900 p-1 rounded border border-slate-800 text-amber-400 font-bold">
           <option value="0">VIP 0</option>
           <option value="1">VIP 1</option>
           <option value="2">VIP 2</option>
@@ -188,5 +228,4 @@ function UserCard({ user, onSave }) {
       </div>
     </div>
   )
-    }
-          
+}
