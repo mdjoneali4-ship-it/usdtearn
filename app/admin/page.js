@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ShieldCheck, Plus, Save, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, Plus, Save, ArrowDownLeft, ArrowUpRight, Crown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function AdminDashboard() {
@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   const [taskTitle, setTaskTitle] = useState('')
   const [taskReward, setTaskReward] = useState('')
   const [taskLink, setTaskLink] = useState('')
+  const [taskVip, setTaskVip] = useState(0) // VIP level option added
 
   // 1 USDT = 120 BDT
   const BDT_RATE = 120
@@ -128,9 +129,18 @@ export default function AdminDashboard() {
 
   const handleCreateTask = async (e) => {
     e.preventDefault()
-    await supabase.from('tasks').insert([{ title: taskTitle, reward: parseFloat(taskReward || 0), link: taskLink || '#', status: 'approved' }])
-    alert('Task Created!')
-    setTaskTitle(''); setTaskReward(''); setTaskLink('')
+    // min_vip field table-e thakle oi onujayi save hobe
+    await supabase.from('tasks').insert([
+      { 
+        title: taskTitle, 
+        reward: parseFloat(taskReward || 0), 
+        link: taskLink || '#', 
+        min_vip: parseInt(taskVip || 0), 
+        status: 'approved' 
+      }
+    ])
+    alert('Task Created Successfully!')
+    setTaskTitle(''); setTaskReward(''); setTaskLink(''); setTaskVip(0)
     fetchData()
   }
 
@@ -213,13 +223,61 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* CREATE TASK */}
+      {/* CREATE TASK SECTION (WITH VIP OPTION) */}
       <form onSubmit={handleCreateTask} className="bg-slate-900 p-4 rounded-xl space-y-3 text-xs">
-        <h2 className="font-bold text-emerald-400 flex items-center gap-1"><Plus className="w-4 h-4" /> Create Task</h2>
-        <input placeholder="Title" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} required className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" />
-        <input placeholder="Reward ($)" type="number" step="0.01" value={taskReward} onChange={e => setTaskReward(e.target.value)} required className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" />
-        <input placeholder="Link" value={taskLink} onChange={e => setTaskLink(e.target.value)} className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" />
-        <button type="submit" className="w-full bg-emerald-500 text-black py-2 rounded font-bold">Publish</button>
+        <h2 className="font-bold text-emerald-400 flex items-center gap-1"><Plus className="w-4 h-4" /> Create New Task</h2>
+        
+        <div>
+          <label className="text-[11px] text-slate-400 mb-1 block">Task Title</label>
+          <input 
+            placeholder="Ex: Subscribe YouTube Channel" 
+            value={taskTitle} 
+            onChange={e => setTaskTitle(e.target.value)} 
+            required 
+            className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" 
+          />
+        </div>
+
+        <div>
+          <label className="text-[11px] text-slate-400 mb-1 block">Reward ($ USDT)</label>
+          <input 
+            placeholder="Ex: 0.50" 
+            type="number" 
+            step="0.01" 
+            value={taskReward} 
+            onChange={e => setTaskReward(e.target.value)} 
+            required 
+            className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" 
+          />
+        </div>
+
+        <div>
+          <label className="text-[11px] text-slate-400 mb-1 block">Target VIP Level (Required Level to Complete Task)</label>
+          <select 
+            value={taskVip} 
+            onChange={e => setTaskVip(e.target.value)} 
+            className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-amber-400 font-bold"
+          >
+            <option value="0">VIP 0 (All Users)</option>
+            <option value="1">VIP 1 Only</option>
+            <option value="2">VIP 2 Only</option>
+            <option value="3">VIP 3 Only</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[11px] text-slate-400 mb-1 block">Task Link (URL)</label>
+          <input 
+            placeholder="https://..." 
+            value={taskLink} 
+            onChange={e => setTaskLink(e.target.value)} 
+            className="w-full bg-slate-950 p-2 rounded border border-slate-800 text-white" 
+          />
+        </div>
+
+        <button type="submit" className="w-full bg-emerald-500 text-black py-2.5 rounded-lg font-bold hover:bg-emerald-400 transition">
+          Publish Task
+        </button>
       </form>
 
       {/* USER MANAGEMENT */}
@@ -249,10 +307,11 @@ function UserCard({ user, onSave }) {
           <option value="0">VIP 0</option>
           <option value="1">VIP 1</option>
           <option value="2">VIP 2</option>
+          <option value="3">VIP 3</option>
         </select>
         <button onClick={() => onSave(user.id, b, v)} className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded font-bold"><Save className="w-3 h-3" /></button>
       </div>
     </div>
   )
         }
-                                          
+        
